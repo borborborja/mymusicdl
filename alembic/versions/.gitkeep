@@ -1,0 +1,2 @@
+# Generated migrations go here (alembic revision --autogenerate).
+# The scaffold creates tables from SQLAlchemy metadata on startup, so this is empty initially.

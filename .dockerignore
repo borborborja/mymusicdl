@@ -1,0 +1,29 @@
+# Keep the build context small and reproducible
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.pyc
+.mypy_cache
+.ruff_cache
+.pytest_cache
+
+# Never bake local state or secrets into the image
+.env
+data/
+/data/
+music/
+*.db
+*.sqlite3
+
+# Frontend deps/build are produced inside the image
+frontend/node_modules
+frontend/dist
+
+# Docs / local-only
+*.md
+!README.md
+.vscode
+.idea
+.DS_Store

@@ -1,0 +1,49 @@
+# mymusicdl — homelab stack (homelab conventions).
+# Lives at /opt/stacks/mymusicdl/compose.yaml ; data/music resolve under /opt/dades.
+services:
+  mymusicdl:
+    build: .
+    image: mymusicdl:latest
+    container_name: mymusicdl
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: ${PORT:-8080}
+      APP_DATA_DIR: /data
+      MUSIC_LIBRARY_PATH: /music
+      TOOLS_VENV: /data/toolsvenv
+      NAVIDROME_URL: ${NAVIDROME_URL}
+      NAVIDROME_USER: ${NAVIDROME_USER}
+      NAVIDROME_PASSWORD: ${NAVIDROME_PASSWORD}
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
+      DOWNLOAD_CONCURRENCY: ${DOWNLOAD_CONCURRENCY:-2}
+      APP_SECRET: ${APP_SECRET}
+      APP_SHARED_PASSWORD: ${APP_SHARED_PASSWORD:-}
+    volumes:
+      # SQLite DB + the mounted tools venv (so `pip install -U` upgrades persist).
+      - ../../dades/mymusicdl/data:/data
+      # MUST be the same host path the Navidrome container mounts (rclone → pCloud),
+      # so a freshly downloaded file is immediately visible to Navidrome.
+      - ../../dades/mymusicdl/music:/music
+    networks:
+      - cloudflare-net
+      - internal
+    ports:
+      # Optional LAN bind on the fixed homelab gateway IP.
+      - "127.0.0.1:${PORT:-8080}:8080"
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+      docker-volume-backup.stop-during-backup: "true"
+      dockflare.enable: "true"
+      dockflare.hostname: "music.example.com"
+      dockflare.service: "http://mymusicdl:8080"
+      dockflare.access.group: "${DOCKFLARE_ACCESS_GROUP:-family}"
+
+networks:
+  cloudflare-net:
+    name: cloudflare-net
+    external: true
+  internal:
+    name: internal
+    external: true
