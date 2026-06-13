@@ -2,8 +2,11 @@
 # Lives at /opt/stacks/mymusicdl/compose.yaml ; data/music resolve under /opt/dades.
 services:
   mymusicdl:
-    build: .
-    image: mymusicdl:latest
+    # Pull the CI-built image from GHCR (.github/workflows/docker-image.yml).
+    # Watchtower (label below) auto-updates the container when a new :latest is pushed.
+    # To build locally instead, comment out `image:` and uncomment `build: .`.
+    image: ghcr.io/borborborja/mymusicdl:latest
+    # build: .
     container_name: mymusicdl
     restart: unless-stopped
     env_file: .env
