@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api } from "../lib/api";
 import type { Job, TrackResult } from "../lib/types";
 import { bestOption, flattenOptions, formatDuration, toTrackPayload } from "../lib/util";
+import Artwork from "./Artwork";
 import LibraryBadge from "./LibraryBadge";
 import QualityBadge from "./QualityBadge";
 
@@ -51,6 +52,13 @@ export default function TrackRow({
           className="h-4 w-4 shrink-0 accent-brand"
         />
       )}
+      <Artwork
+        src={track.cover_url}
+        alt={track.album ?? track.title}
+        seed={`${track.album ?? track.title} ${track.artist}`}
+        rounded="rounded"
+        className="h-11 w-11"
+      />
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium">{track.title}</div>
         <div className="truncate text-sm text-slate-400">

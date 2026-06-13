@@ -16,6 +16,18 @@ log = get_logger(__name__)
 _BASE = "https://musicbrainz.org/ws/2"
 _UA = "mymusicdl/0.1 (https://github.com/; self-hosted family music tool)"
 
+# Cover Art Archive — free, keyless artwork keyed by MusicBrainz MBIDs. Not every release has art,
+# so these URLs may 404; the frontend's <Artwork> falls back to a generated cover on image error.
+_CAA = "https://coverartarchive.org"
+
+
+def _caa_release(release_id: str | None) -> str | None:
+    return f"{_CAA}/release/{release_id}/front-250" if release_id else None
+
+
+def _caa_release_group(rg_id: str | None) -> str | None:
+    return f"{_CAA}/release-group/{rg_id}/front-250" if rg_id else None
+
 
 class MusicBrainzMetadata(MetadataProvider):
     name = "musicbrainz"
@@ -52,6 +64,7 @@ class MusicBrainzMetadata(MetadataProvider):
                     source_url=None,
                     isrc=(rec.get("isrcs") or [None])[0],
                     duration_s=int(length) // 1000 if length else None,
+                    cover_url=_caa_release(releases[0].get("id")) if releases else None,
                     ext_ids={"mbid": rec["id"]} if rec.get("id") else {},
                 )
             )
@@ -69,6 +82,7 @@ class MusicBrainzMetadata(MetadataProvider):
                     artist=self._artist_credit(rg),
                     provider=self.name,
                     year=int(date[:4]) if date[:4].isdigit() else None,
+                    cover_url=_caa_release_group(rg.get("id")),
                 )
             )
         return out
@@ -90,11 +104,14 @@ class MusicBrainzMetadata(MetadataProvider):
         if not releases:
             return None, []
         rel = releases[0]
+        # Prefer art on the specific release; fall back to the release-group cover.
+        cover = _caa_release(rel.get("id")) or _caa_release_group(album_id)
         ref = AlbumRef(
             id=album_id,
             title=rel.get("title", ""),
             artist=self._artist_credit(rel),
             provider=self.name,
+            cover_url=cover,
         )
         tracks: list[TrackRef] = []
         for medium in rel.get("media") or []:
@@ -107,6 +124,7 @@ class MusicBrainzMetadata(MetadataProvider):
                         artist=self._artist_credit(rel),
                         album=rel.get("title"),
                         duration_s=int(length) // 1000 if length else None,
+                        cover_url=cover,
                     )
                 )
         return ref, tracks

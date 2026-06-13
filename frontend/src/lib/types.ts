@@ -75,8 +75,21 @@ export interface Job {
   result_path?: string | null;
   batch_id?: string | null;
   title?: string | null;
+  origin?: string | null; // web | telegram | matrix
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+export interface BotStatus {
+  name: string; // telegram | matrix
+  enabled: boolean;
+  configured: boolean;
+  source?: string | null; // env | db | null
+  running: boolean;
+  connected: boolean;
+  identity?: string | null;
+  allowed_count: number;
+  error?: string | null;
 }
 
 export interface Tool {

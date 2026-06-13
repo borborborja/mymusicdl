@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { api, getStoredPassword, setStoredPassword } from "../lib/api";
-import type { SettingsData } from "../lib/types";
+import type { BotStatus, SettingsData } from "../lib/types";
 
 const CRED_FIELD: Record<string, { key: string; placeholder: string }> = {
   tidal: { key: "token", placeholder: "access token de Tidal" },
@@ -9,14 +9,64 @@ const CRED_FIELD: Record<string, { key: string; placeholder: string }> = {
   deezer: { key: "arl", placeholder: "cookie ARL de Deezer" },
 };
 
+const BOT_LABEL: Record<string, string> = { telegram: "Telegram", matrix: "Matrix" };
+
+const BOT_FIELDS: Record<
+  string,
+  { key: string; label: string; placeholder: string; type?: string }[]
+> = {
+  telegram: [
+    { key: "token", label: "Bot token", placeholder: "123456:ABC… (de @BotFather)", type: "password" },
+    { key: "allowed_users", label: "IDs permitidos", placeholder: "111111111, 222222222" },
+  ],
+  matrix: [
+    { key: "homeserver", label: "Homeserver", placeholder: "https://matrix.org" },
+    { key: "user_id", label: "User ID del bot", placeholder: "@musicbot:matrix.org" },
+    { key: "access_token", label: "Access token", placeholder: "token de acceso", type: "password" },
+    { key: "allowed_users", label: "Usuarios permitidos", placeholder: "@tu:matrix.org, @otro:matrix.org" },
+    { key: "room_id", label: "Room ID (opcional)", placeholder: "!sala:matrix.org" },
+  ],
+};
+
+function StatusChip({ bot }: { bot: BotStatus }) {
+  if (!bot.configured) {
+    return <span className="chip border border-slate-700 text-slate-400">desactivado</span>;
+  }
+  if (bot.running && bot.connected) {
+    return (
+      <span className="chip border border-emerald-600/30 bg-emerald-500/15 text-emerald-300">
+        ● conectado
+      </span>
+    );
+  }
+  if (bot.error) {
+    return (
+      <span
+        title={bot.error}
+        className="chip border border-red-600/30 bg-red-500/15 text-red-300"
+      >
+        error
+      </span>
+    );
+  }
+  return (
+    <span className="chip border border-amber-600/30 bg-amber-500/15 text-amber-300">
+      configurado
+    </span>
+  );
+}
+
 export default function SettingsPage() {
   const [data, setData] = useState<SettingsData | null>(null);
+  const [bots, setBots] = useState<BotStatus[]>([]);
   const [inputs, setInputs] = useState<Record<string, string>>({});
+  const [botInputs, setBotInputs] = useState<Record<string, Record<string, string>>>({});
   const [pw, setPw] = useState(getStoredPassword());
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = () => {
     api.settings().then(setData).catch(() => undefined);
+    api.bots().then(setBots).catch(() => undefined);
   };
   useEffect(load, []);
 
@@ -44,10 +94,37 @@ export default function SettingsPage() {
     }
   };
 
-  const savePw = () => {
-    setStoredPassword(pw);
-    setMsg("Contraseña guardada en este navegador.");
+  const saveBot = async (name: string) => {
+    const fields = botInputs[name] ?? {};
+    const data = Object.fromEntries(
+      Object.entries(fields).filter(([, v]) => v && v.trim()).map(([k, v]) => [k, v.trim()]),
+    );
+    if (!Object.keys(data).length) {
+      setMsg("Rellena al menos un campo del bot.");
+      return;
+    }
+    try {
+      await api.setBot(name, data);
+      setMsg(`${BOT_LABEL[name] ?? name} guardado.`);
+      setBotInputs((p) => ({ ...p, [name]: {} }));
+      load();
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
   };
+
+  const disableBot = async (name: string) => {
+    try {
+      await api.deleteBot(name);
+      setMsg(`${BOT_LABEL[name] ?? name} desactivado.`);
+      load();
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
+
+  const setBotField = (name: string, key: string, value: string) =>
+    setBotInputs((p) => ({ ...p, [name]: { ...(p[name] ?? {}), [key]: value } }));
 
   const paid = data?.providers.filter((p) => p.requires_credentials) ?? [];
 
@@ -67,6 +144,71 @@ export default function SettingsPage() {
           {msg}
         </div>
       )}
+
+      <section className="card">
+        <h2 className="mb-2 font-medium">Bots de mensajería</h2>
+        <p className="mb-3 text-sm text-slate-400">
+          Misma funcionalidad que la web, por chat: busca y descarga enviando mensajes. Solo los IDs
+          de la allowlist pueden usarlo. Las descargas hechas por un bot se marcan con 📱 en la cola.
+        </p>
+        <div className="space-y-4">
+          {bots.map((bot) => {
+            const fromEnv = bot.source === "env";
+            return (
+              <div key={bot.name} className="rounded-lg border border-slate-800 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{BOT_LABEL[bot.name] ?? bot.name}</span>
+                  <StatusChip bot={bot} />
+                  {bot.identity && (
+                    <span className="text-xs text-slate-400">{bot.identity}</span>
+                  )}
+                  {bot.configured && (
+                    <span className="text-xs text-slate-500">
+                      · {bot.allowed_count} permitido(s) · vía {bot.source}
+                    </span>
+                  )}
+                </div>
+
+                {bot.error && (
+                  <p className="mt-2 break-words text-xs text-red-400">{bot.error}</p>
+                )}
+
+                {fromEnv ? (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Configurado mediante variables de entorno (.env). Edítalo allí para cambiarlo.
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {BOT_FIELDS[bot.name]?.map((f) => (
+                      <div key={f.key} className="flex flex-wrap items-center gap-2">
+                        <label className="w-36 text-sm text-slate-300">{f.label}</label>
+                        <input
+                          className="input flex-1"
+                          type={f.type ?? "text"}
+                          placeholder={f.placeholder}
+                          value={botInputs[bot.name]?.[f.key] ?? ""}
+                          onChange={(e) => setBotField(bot.name, f.key, e.target.value)}
+                        />
+                      </div>
+                    ))}
+                    <div className="flex gap-2 pt-1">
+                      <button className="btn-primary" onClick={() => saveBot(bot.name)}>
+                        Guardar y conectar
+                      </button>
+                      {bot.configured && (
+                        <button className="btn-ghost" onClick={() => disableBot(bot.name)}>
+                          Desactivar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {bots.length === 0 && <p className="text-sm text-slate-500">No hay bots disponibles.</p>}
+        </div>
+      </section>
 
       <section className="card">
         <h2 className="mb-2 font-medium">Fuentes de pago</h2>
@@ -130,7 +272,13 @@ export default function SettingsPage() {
             onChange={(e) => setPw(e.target.value)}
             placeholder="contraseña"
           />
-          <button className="btn-primary" onClick={savePw}>
+          <button
+            className="btn-primary"
+            onClick={() => {
+              setStoredPassword(pw);
+              setMsg("Contraseña guardada en este navegador.");
+            }}
+          >
             Guardar
           </button>
         </div>

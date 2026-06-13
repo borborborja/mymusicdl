@@ -30,6 +30,8 @@ async def _load_credentials(session, registry, settings) -> None:
     """Re-apply persisted provider credentials so paid sources survive a restart."""
     res = await session.execute(select(Credential).where(Credential.enabled.is_(True)))
     for cred in res.scalars().all():
+        if cred.provider.startswith("bot:"):
+            continue  # bot configs are owned by the BotManager, not the provider registry
         try:
             data = json.loads(decrypt_secret(cred.data_json, settings.app_secret))
             registry.set_credentials(cred.provider, data)
@@ -47,6 +49,7 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     # Lazily import subsystems to keep import-time side effects out of module load.
+    from backend.app.bots.manager import BotManager
     from backend.app.downloads.progress import ProgressBroker
     from backend.app.downloads.queue import DownloadQueue
     from backend.app.downloads.worker import WorkerPool
@@ -71,6 +74,14 @@ async def lifespan(app: FastAPI):
         session_factory=SessionLocal,
     )
     updater = Updater(settings=settings, session_factory=SessionLocal, broker=broker, queue=queue)
+    bots = BotManager(
+        settings=settings,
+        session_factory=SessionLocal,
+        broker=broker,
+        queue=queue,
+        registry=registry,
+        aggregator=aggregator,
+    )
 
     app.state.settings = settings
     app.state.broker = broker
@@ -80,6 +91,7 @@ async def lifespan(app: FastAPI):
     app.state.aggregator = aggregator
     app.state.worker = worker
     app.state.updater = updater
+    app.state.bots = bots
 
     # Reload persisted credentials, requeue interrupted jobs, then start workers.
     async with SessionLocal() as session:
@@ -87,11 +99,13 @@ async def lifespan(app: FastAPI):
         await queue.rehydrate(session)
     await worker.start()
     await updater.start()
+    await bots.start()
 
     try:
         yield
     finally:
         log.info("Shutting down mymusicdl")
+        await bots.stop()
         await worker.stop()
         await updater.stop()
         if navidrome is not None:
@@ -104,6 +118,7 @@ def create_app() -> FastAPI:
     # ── API routers ──
     from backend.app.api import (
         routes_album,
+        routes_bots,
         routes_downloads,
         routes_events,
         routes_health,
@@ -122,6 +137,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_library.router, prefix="/api", tags=["library"])
     app.include_router(routes_tools.router, prefix="/api", tags=["tools"])
     app.include_router(routes_settings.router, prefix="/api", tags=["settings"])
+    app.include_router(routes_bots.router, prefix="/api", tags=["bots"])
     app.include_router(routes_events.router, prefix="/api", tags=["events"])
 
     # ── SPA static (built into the image at /static; absent in dev → Vite serves it) ──

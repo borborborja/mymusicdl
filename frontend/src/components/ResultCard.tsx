@@ -1,27 +1,36 @@
 import { Link } from "react-router-dom";
 
 import type { AlbumResult, ArtistResult } from "../lib/types";
+import Artwork from "./Artwork";
 
 export function AlbumCard({ album }: { album: AlbumResult }) {
   return (
     <Link
       to={`/album/${encodeURIComponent(album.provider)}/${encodeURIComponent(album.id)}`}
-      className="card flex gap-3 hover:border-slate-600"
+      className="group block"
     >
-      {album.cover_url ? (
-        <img src={album.cover_url} alt="" className="h-16 w-16 rounded object-cover" />
-      ) : (
-        <div className="h-16 w-16 rounded bg-slate-800" />
-      )}
-      <div className="min-w-0">
-        <div className="truncate font-medium">{album.title}</div>
+      <div className="relative">
+        <Artwork
+          src={album.cover_url}
+          alt={album.title}
+          seed={`${album.title} ${album.artist}`}
+          rounded="rounded-xl"
+          className="aspect-square w-full shadow-lg ring-1 ring-slate-800 transition group-hover:ring-2 group-hover:ring-brand/70"
+        />
+        {album.total_tracks ? (
+          <span className="absolute right-2 top-2 rounded-full bg-black/65 px-2 py-0.5 text-[11px] font-medium text-white/90 backdrop-blur">
+            {album.total_tracks}
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-2 min-w-0">
+        <div className="truncate font-medium text-slate-100 group-hover:text-brand">
+          {album.title}
+        </div>
         <div className="truncate text-sm text-slate-400">
           {album.artist}
           {album.year ? ` · ${album.year}` : ""}
         </div>
-        {album.total_tracks ? (
-          <div className="text-xs text-slate-500">{album.total_tracks} pistas</div>
-        ) : null}
       </div>
     </Link>
   );
@@ -37,14 +46,19 @@ export function ArtistCard({
   return (
     <button
       onClick={() => onPick(artist.name)}
-      className="card flex items-center gap-3 text-left hover:border-slate-600"
+      className="group flex flex-col items-center gap-2 text-center"
+      title={`Ver álbumes de ${artist.name}`}
     >
-      {artist.cover_url ? (
-        <img src={artist.cover_url} alt="" className="h-16 w-16 rounded-full object-cover" />
-      ) : (
-        <div className="h-16 w-16 rounded-full bg-slate-800" />
-      )}
-      <div className="truncate font-medium">{artist.name}</div>
+      <Artwork
+        src={artist.cover_url}
+        alt={artist.name}
+        seed={artist.name}
+        rounded="rounded-full"
+        className="aspect-square w-full shadow-lg ring-1 ring-slate-800 transition group-hover:ring-2 group-hover:ring-brand/70"
+      />
+      <div className="w-full truncate text-sm font-medium text-slate-200 group-hover:text-brand">
+        {artist.name}
+      </div>
     </button>
   );
 }

@@ -57,6 +57,7 @@ class Job(Base):
     result_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     batch_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     title: Mapped[str | None] = mapped_column(String(512), nullable=True)  # human label for the UI
+    origin: Mapped[str] = mapped_column(String(16), default="web")  # web|telegram|matrix (who queued it)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow

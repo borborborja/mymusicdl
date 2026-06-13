@@ -42,5 +42,6 @@ class JobDTO(BaseModel):
     result_path: str | None = None
     batch_id: str | None = None
     title: str | None = None
+    origin: str = "web"
     created_at: datetime | None = None
     updated_at: datetime | None = None

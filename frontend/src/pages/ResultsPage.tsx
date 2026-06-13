@@ -41,7 +41,7 @@ export default function ResultsPage({
       )}
 
       {data.kind === "album" && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {data.albums.length === 0 && <p className="text-slate-500">Sin resultados.</p>}
           {data.albums.map((a) => (
             <AlbumCard key={`${a.provider}-${a.id}`} album={a} />
@@ -50,7 +50,7 @@ export default function ResultsPage({
       )}
 
       {data.kind === "artist" && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-3 gap-x-4 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
           {data.artists.length === 0 && <p className="text-slate-500">Sin resultados.</p>}
           {data.artists.map((a) => (
             <ArtistCard key={`${a.provider}-${a.id}`} artist={a} onPick={onArtistPick} />

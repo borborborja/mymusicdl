@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 
+import Artwork from "../components/Artwork";
 import TrackRow from "../components/TrackRow";
 import { api } from "../lib/api";
 import type { AlbumDetail, DownloadItemInput } from "../lib/types";
@@ -102,21 +103,34 @@ export default function AlbumPage() {
 
   return (
     <div>
-      <div className="card flex gap-4">
-        {detail.album.cover_url ? (
-          <img src={detail.album.cover_url} className="h-24 w-24 rounded object-cover" alt="" />
-        ) : (
-          <div className="h-24 w-24 rounded bg-slate-800" />
+      <div className="relative overflow-hidden rounded-xl border border-slate-800">
+        {detail.album.cover_url && (
+          <div
+            aria-hidden
+            className="absolute inset-0 -z-10 scale-110 bg-cover bg-center opacity-25 blur-2xl"
+            style={{ backgroundImage: `url("${detail.album.cover_url}")` }}
+          />
         )}
-        <div>
-          <h1 className="text-xl font-semibold">{detail.album.title}</h1>
-          <p className="text-slate-400">
-            {detail.album.artist}
-            {detail.album.year ? ` · ${detail.album.year}` : ""}
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            {detail.tracks.length} pistas · no se descargan álbumes enteros: elige pistas.
-          </p>
+        <div className="absolute inset-0 -z-10 bg-gradient-to-t from-slate-950 via-slate-950/70 to-slate-900/40" />
+        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-end">
+          <Artwork
+            src={detail.album.cover_url}
+            alt={detail.album.title}
+            seed={`${detail.album.title} ${detail.album.artist}`}
+            rounded="rounded-lg"
+            className="h-36 w-36 shadow-2xl ring-1 ring-white/10 sm:h-40 sm:w-40"
+          />
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-wide text-slate-400">Álbum</p>
+            <h1 className="mt-0.5 text-2xl font-bold leading-tight">{detail.album.title}</h1>
+            <p className="mt-1 text-slate-300">
+              {detail.album.artist}
+              {detail.album.year ? ` · ${detail.album.year}` : ""}
+            </p>
+            <p className="mt-2 text-xs text-slate-400">
+              {detail.tracks.length} pistas · no se descargan álbumes enteros: elige pistas.
+            </p>
+          </div>
         </div>
       </div>
 

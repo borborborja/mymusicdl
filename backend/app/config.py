@@ -45,6 +45,16 @@ class Settings(BaseSettings):
     app_secret: str = "dev-insecure-secret-change-me"
     app_shared_password: str | None = None
 
+    # ── messaging bots (same functionality as the web, over chat) ──
+    # Defining a token/credentials here enables the bot; leave blank to configure it in Settings.
+    telegram_bot_token: str | None = None
+    telegram_allowed_users: str | None = None  # CSV of numeric Telegram user IDs (allowlist)
+    matrix_homeserver: str | None = None  # e.g. https://matrix.org
+    matrix_user_id: str | None = None  # e.g. @musicbot:matrix.org
+    matrix_access_token: str | None = None
+    matrix_allowed_users: str | None = None  # CSV of @user:server allowed to command the bot
+    matrix_room_id: str | None = None  # optional: only respond in this room
+
     # ── paid providers (presence enables the corresponding adapter) ──
     tidal_token: str | None = None
     qobuz_token: str | None = None

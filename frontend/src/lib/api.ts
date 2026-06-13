@@ -1,5 +1,6 @@
 import type {
   AlbumDetail,
+  BotStatus,
   DownloadItemInput,
   Job,
   SearchResponse,
@@ -81,4 +82,13 @@ export const api = {
 
   libraryItems: () => req<unknown[]>("/library/items"),
   rescan: () => req<unknown>("/library/rescan", { method: "POST" }),
+
+  bots: () => req<BotStatus[]>("/bots"),
+  setBot: (name: string, data: Record<string, string>) =>
+    req<{ ok: boolean; status: BotStatus | null }>(`/bots/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body: JSON.stringify({ data }),
+    }),
+  deleteBot: (name: string) =>
+    req<{ ok: boolean }>(`/bots/${encodeURIComponent(name)}`, { method: "DELETE" }),
 };

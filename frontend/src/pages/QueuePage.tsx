@@ -32,10 +32,22 @@ export default function QueuePage() {
           <div key={j.id} className="card">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="truncate font-medium">{j.title ?? j.id}</div>
+                <div className="flex items-center gap-1.5">
+                  {j.origin && j.origin !== "web" && (
+                    <span
+                      title={`Añadida desde ${j.origin}`}
+                      className="shrink-0 text-brand"
+                      aria-label={`Añadida vía ${j.origin}`}
+                    >
+                      📱
+                    </span>
+                  )}
+                  <span className="truncate font-medium">{j.title ?? j.id}</span>
+                </div>
                 <div className="text-xs text-slate-500">
                   {j.provider ?? j.kind}
                   {j.stage ? ` · ${j.stage}` : ""}
+                  {j.origin && j.origin !== "web" ? ` · vía ${j.origin}` : ""}
                 </div>
               </div>
               <div className="flex items-center gap-2">
