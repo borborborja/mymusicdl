@@ -26,9 +26,10 @@ services:
     volumes:
       # SQLite DB + the mounted tools venv (so `pip install -U` upgrades persist).
       - ../../dades/mymusicdl/data:/data
-      # MUST be the same host path the Navidrome container mounts (rclone → pCloud),
-      # so a freshly downloaded file is immediately visible to Navidrome.
-      - ../../dades/mymusicdl/music:/music
+      # Share the same named rclone volume that Navidrome uses (defined in the
+      # navidrome stack as driver: rclone / remote: your-music-remote:).
+      # A freshly downloaded file is immediately visible to Navidrome via this shared mount.
+      - musica:/music
     networks:
       - cloudflare-net
       - internal
@@ -49,4 +50,10 @@ networks:
     external: true
   internal:
     name: internal
+    external: true
+
+volumes:
+  # External named volume defined in the navidrome stack (driver: rclone → your-music-remote:).
+  # Both containers write/read from the same encrypted pCloud mount.
+  musica:
     external: true
