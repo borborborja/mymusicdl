@@ -5,8 +5,8 @@ Self-hosted **family music downloader** that adds well-tagged **single tracks** 
 qualities are available per source, download one track or a batch, and let the app tell you what's
 **already in the library and at what quality** (so you can re-download to something better).
 
-The downloaded file is written **directly into the Navidrome library path** (a shared
-`rclone → pCloud` mount), and Navidrome is asked to rescan.
+The downloaded file is written **directly into the Navidrome library volume** (the same shared
+volume Navidrome mounts — e.g. an `rclone` remote), and Navidrome is asked to rescan.
 
 > Status: **initial scaffold**. The free path (`spotdl` + `yt-dlp`) is wired end-to-end-ready.
 > Paid lossless sources (Tidal / Qobuz / Deezer via `streamrip`, plus `tiddl` for Tidal) are
@@ -37,7 +37,7 @@ React + Vite + Tailwind SPA  ──/api──▶  FastAPI (uvicorn)
 backend/app/   FastAPI backend (api, providers, metadata, navidrome, downloads, library, updater, db)
 frontend/      React + Vite + Tailwind SPA (built into the image, served as static files)
 scripts/       entrypoint.sh (bootstrap tools venv + run) and bootstrap_tools.sh
-compose.yaml   Homelab stack (homelab conventions)
+compose.yaml   Homelab stack (Cloudflare tunnel + Watchtower; all site values via .env)
 Dockerfile     Multi-stage: build SPA → python+ffmpeg runtime
 ```
 
@@ -67,15 +67,15 @@ run `alembic revision --autogenerate -m "..."`.
 ## Docker / homelab deploy
 
 ```bash
-# on the homelab host, at /opt/stacks/mymusicdl/
-cp .env.example .env            # fill Navidrome + (optional) Spotify creds + APP_SECRET
-docker compose up --build -d
+cp .env.example .env            # fill Navidrome creds, APP_SECRET, networks/volume, hostname
+docker compose up -d            # pulls ghcr.io/borborborja/mymusicdl:latest
 docker compose logs -f mymusicdl
 ```
 
-`compose.yaml` mounts `../../dades/mymusicdl/music` → `/music`. **This must be the same host
-path the Navidrome container mounts** (the `rclone → pCloud` mount) so a freshly downloaded file is
-immediately visible; after each download the app calls Subsonic `startScan`.
+Every site-specific value is read from `.env`: `EDGE_NETWORK` / `INTERNAL_NETWORK` (existing external
+Docker networks), `MUSIC_VOLUME` (the **same named volume the Navidrome container mounts**, so a freshly
+downloaded file is immediately visible), `PUBLIC_HOSTNAME`, `LAN_BIND_IP`, and `DATA_DIR`. After each
+download the app calls Subsonic `startScan`.
 
 ## Enabling paid lossless sources later
 

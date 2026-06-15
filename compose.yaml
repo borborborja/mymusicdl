@@ -1,5 +1,7 @@
-# mymusicdl — homelab stack (homelab conventions).
-# Lives at /opt/stacks/mymusicdl/compose.yaml ; data/music resolve under /opt/dades.
+# mymusicdl — self-hosted family music downloader for Navidrome.
+# Place this next to a .env (see .env.example) and run `docker compose up -d`.
+# Built for a Cloudflare-tunnel + Watchtower homelab, but every site-specific value
+# (hostname, networks, bind IP, music volume, data dir) is driven from .env.
 services:
   mymusicdl:
     # Pull the CI-built image from GHCR (.github/workflows/docker-image.yml).
@@ -25,35 +27,39 @@ services:
       APP_SHARED_PASSWORD: ${APP_SHARED_PASSWORD:-}
     volumes:
       # SQLite DB + the mounted tools venv (so `pip install -U` upgrades persist).
-      - ../../dades/mymusicdl/data:/data
-      # Share the same named rclone volume that Navidrome uses (defined in the
-      # navidrome stack as driver: rclone / remote: your-music-remote:).
-      # A freshly downloaded file is immediately visible to Navidrome via this shared mount.
-      - musica:/music
+      - ${DATA_DIR:-./data}:/data
+      # Share the SAME named volume your Navidrome stack uses for its music library,
+      # so a freshly downloaded file is immediately visible to Navidrome. Set
+      # MUSIC_VOLUME to that volume's name (it must already exist).
+      - music:/music
     networks:
-      - cloudflare-net
+      - edge
       - internal
     ports:
-      # Optional LAN bind on the fixed homelab gateway IP.
-      - "127.0.0.1:${PORT:-8080}:8080"
+      # Bind the web UI on the host. Default is loopback-only; set LAN_BIND_IP to a LAN
+      # address (or 0.0.0.0) to expose it. Behind a tunnel you can drop this block.
+      - "${LAN_BIND_IP:-127.0.0.1}:${PORT:-8080}:8080"
     labels:
       com.centurylinklabs.watchtower.enable: "true"
       docker-volume-backup.stop-during-backup: "true"
       dockflare.enable: "true"
-      dockflare.hostname: "music.example.com"
+      dockflare.hostname: "${PUBLIC_HOSTNAME:-music.example.com}"
       dockflare.service: "http://mymusicdl:8080"
       dockflare.access.group: "${DOCKFLARE_ACCESS_GROUP:-family}"
 
 networks:
-  cloudflare-net:
-    name: cloudflare-net
+  # External networks created outside this stack: `edge` is your Cloudflare-tunnel
+  # network, `internal` is the shared network your Navidrome/other services sit on.
+  # Their real names come from .env (EDGE_NETWORK / INTERNAL_NETWORK).
+  edge:
+    name: ${EDGE_NETWORK:-cloudflare-net}
     external: true
   internal:
-    name: internal
+    name: ${INTERNAL_NETWORK:-internal}
     external: true
 
 volumes:
-  # External named volume defined in the navidrome stack (driver: rclone → your-music-remote:).
-  # Both containers write/read from the same encrypted pCloud mount.
-  musica:
+  # External named volume holding the music library (the same one Navidrome mounts).
+  music:
+    name: ${MUSIC_VOLUME:-music}
     external: true
