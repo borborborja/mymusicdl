@@ -12,6 +12,18 @@ volume Navidrome mounts — e.g. an `rclone` remote), and Navidrome is asked to 
 > Paid lossless sources (Tidal / Qobuz / Deezer via `streamrip`, plus `tiddl` for Tidal) are
 > implemented as **adapters that stay disabled until you add credentials**.
 
+## Documentation
+
+Working on this project (human or AI agent)? Start with **[`CLAUDE.md`](CLAUDE.md)** — it holds the
+golden rules that keep the project from breaking. Deeper docs live in [`docs/`](docs/):
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how it fits together; the download lifecycle.
+- [`docs/GUIDELINES.md`](docs/GUIDELINES.md) — coding style + recipes for common changes.
+- [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) — owner-designated product/architecture decisions.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — planned work to keep in mind when coding now.
+- [`docs/VERIFICATION.md`](docs/VERIFICATION.md) — how to verify each kind of change.
+- [`docs/DEPLOY.md`](docs/DEPLOY.md) — build + deploy + the GHCR package-visibility gotcha.
+
 ## Architecture
 
 ```
