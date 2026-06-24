@@ -13,6 +13,7 @@ import os
 
 from backend.app.config import Settings
 from backend.app.db.models import Job
+from backend.app.downloads.errors import humanize_error
 from backend.app.downloads.paths import build_dest
 from backend.app.downloads.progress import ProgressBroker
 from backend.app.downloads.queue import DownloadQueue
@@ -240,12 +241,14 @@ class WorkerPool:
                     await self.queue.put(job_id)
                 raise
             except SubprocessError as exc:
-                job.status, job.error, job.stage = "error", str(exc)[:4000], "error"
+                log.warning("download job %s failed: %s", job_id, exc)
+                job.status, job.error, job.stage = "error", humanize_error(str(exc))[:4000], "error"
                 await session.commit()
                 await self._publish(job)
                 return
             except Exception as exc:  # noqa: BLE001
-                job.status, job.error, job.stage = "error", repr(exc)[:4000], "error"
+                log.exception("download job %s crashed", job_id)
+                job.status, job.error, job.stage = "error", humanize_error(repr(exc))[:4000], "error"
                 await session.commit()
                 await self._publish(job)
                 return

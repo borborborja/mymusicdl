@@ -3,6 +3,7 @@ import type {
   BotStatus,
   DownloadItemInput,
   Job,
+  LibraryItem,
   SearchResponse,
   SettingsData,
   Tool,
@@ -93,7 +94,7 @@ export const api = {
       body: JSON.stringify({ template }),
     }),
 
-  libraryItems: () => req<unknown[]>("/library/items"),
+  libraryItems: () => req<LibraryItem[]>("/library/items?limit=300"),
   rescan: () => req<unknown>("/library/rescan", { method: "POST" }),
 
   bots: () => req<BotStatus[]>("/bots"),

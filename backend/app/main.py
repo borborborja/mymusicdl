@@ -35,7 +35,11 @@ async def _load_credentials(session, registry, aggregator, settings) -> None:
         try:
             data = json.loads(decrypt_secret(cred.data_json, settings.app_secret))
             if cred.provider == "spotify":
-                aggregator.set_spotify_credentials(data)  # metadata catalog, not a download provider
+                # metadata catalog + spotdl downloader (not in the paid registry path)
+                aggregator.set_spotify_credentials(data)
+                sp = registry.get("spotdl")
+                if sp is not None and hasattr(sp, "set_spotify_credentials"):
+                    sp.set_spotify_credentials(data)
             else:
                 registry.set_credentials(cred.provider, data)
             log.info("Loaded credentials for '%s'", cred.provider)
@@ -100,6 +104,11 @@ async def lifespan(app: FastAPI):
     async with SessionLocal() as session:
         await _load_credentials(session, registry, aggregator, settings)
         await queue.rehydrate(session)
+        from backend.app.db.repo import prune_old_jobs
+
+        removed = await prune_old_jobs(session, settings.job_retention_days)
+        if removed:
+            log.info("Pruned %d old finished job(s)", removed)
     await worker.start()
     await updater.start()
     await bots.start()

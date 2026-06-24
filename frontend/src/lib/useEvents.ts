@@ -13,7 +13,12 @@ export function useEventStream() {
       try {
         const data = JSON.parse(e.data);
         if (data.type === "job" && data.job) {
-          upsertJob(data.job);
+          // The live event carries transient speed/eta alongside the job DTO — merge them in so the
+          // queue can show throughput while a download runs.
+          const extra: Record<string, unknown> = {};
+          if (data.speed != null) extra.speed = data.speed;
+          if (data.eta_s != null) extra.eta_s = data.eta_s;
+          upsertJob({ ...data.job, ...extra });
         } else if (data.type === "tools") {
           window.dispatchEvent(new CustomEvent(TOOLS_EVENT));
         }
