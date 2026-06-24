@@ -26,16 +26,19 @@ log = get_logger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "static"
 
 
-async def _load_credentials(session, registry, settings) -> None:
-    """Re-apply persisted provider credentials so paid sources survive a restart."""
+async def _load_credentials(session, registry, aggregator, settings) -> None:
+    """Re-apply persisted credentials so paid sources / Spotify catalog survive a restart."""
     res = await session.execute(select(Credential).where(Credential.enabled.is_(True)))
     for cred in res.scalars().all():
         if cred.provider.startswith("bot:"):
             continue  # bot configs are owned by the BotManager, not the provider registry
         try:
             data = json.loads(decrypt_secret(cred.data_json, settings.app_secret))
-            registry.set_credentials(cred.provider, data)
-            log.info("Loaded credentials for provider '%s'", cred.provider)
+            if cred.provider == "spotify":
+                aggregator.set_spotify_credentials(data)  # metadata catalog, not a download provider
+            else:
+                registry.set_credentials(cred.provider, data)
+            log.info("Loaded credentials for '%s'", cred.provider)
         except Exception:
             log.warning("Failed to load credentials for '%s'", cred.provider, exc_info=True)
 
@@ -95,7 +98,7 @@ async def lifespan(app: FastAPI):
 
     # Reload persisted credentials, requeue interrupted jobs, then start workers.
     async with SessionLocal() as session:
-        await _load_credentials(session, registry, settings)
+        await _load_credentials(session, registry, aggregator, settings)
         await queue.rehydrate(session)
     await worker.start()
     await updater.start()

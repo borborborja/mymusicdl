@@ -44,7 +44,13 @@ class StreamripProvider(Provider):
         return _ladder(self.max_quality)
 
     async def download(
-        self, track: TrackRef, *, quality: Quality, dest_dir: str, job_id: str
+        self,
+        track: TrackRef,
+        *,
+        quality: Quality,
+        dest_dir: str,
+        job_id: str,
+        filename: str | None = None,
     ) -> AsyncIterator[ProgressEvent]:
         if not self.enabled:
             raise RuntimeError(f"{self.label} is not configured (no credentials)")

@@ -137,10 +137,17 @@ class Provider(ABC):
 
     @abstractmethod
     def download(
-        self, track: TrackRef, *, quality: Quality, dest_dir: str, job_id: str
+        self,
+        track: TrackRef,
+        *,
+        quality: Quality,
+        dest_dir: str,
+        job_id: str,
+        filename: str | None = None,
     ) -> AsyncIterator[ProgressEvent]:
         """Run the underlying CLI as a subprocess, yielding progress and writing a single,
-        well-tagged audio file into ``dest_dir``. Implemented as an async generator."""
+        well-tagged audio file into ``dest_dir``. ``filename`` (without extension) is the desired
+        base name; providers that manage their own naming may ignore it. Async generator."""
         raise NotImplementedError
 
     def info(self) -> dict:

@@ -11,6 +11,23 @@ const CRED_FIELD: Record<string, { key: string; placeholder: string }> = {
 
 const BOT_LABEL: Record<string, string> = { telegram: "Telegram", matrix: "Matrix" };
 
+const LAYOUT_PRESETS: { label: string; value: string }[] = [
+  { label: "Artista / Álbum / Canción", value: "{artist}/{album}/{title}" },
+  { label: "Artista / Canción", value: "{artist}/{title}" },
+  { label: "Plano (Artista - Canción)", value: "{artist} - {title}" },
+];
+
+const layoutExample = (tpl: string): string =>
+  tpl
+    .split("{artist}")
+    .join("Daft Punk")
+    .split("{album}")
+    .join("Discovery")
+    .split("{title}")
+    .join("One More Time")
+    .split("{year}")
+    .join("2001") + ".mp3";
+
 const BOT_FIELDS: Record<
   string,
   { key: string; label: string; placeholder: string; type?: string }[]
@@ -63,12 +80,69 @@ export default function SettingsPage() {
   const [botInputs, setBotInputs] = useState<Record<string, Record<string, string>>>({});
   const [pw, setPw] = useState(getStoredPassword());
   const [msg, setMsg] = useState<string | null>(null);
+  const [spotify, setSpotify] = useState({ client_id: "", client_secret: "" });
+  const [concurrency, setConcurrency] = useState(2);
+  const [layout, setLayout] = useState("{artist}/{album}/{title}");
 
   const load = () => {
-    api.settings().then(setData).catch(() => undefined);
+    api
+      .settings()
+      .then((s) => {
+        setData(s);
+        setConcurrency(s.download_concurrency);
+        setLayout(s.download_layout);
+      })
+      .catch(() => undefined);
     api.bots().then(setBots).catch(() => undefined);
   };
   useEffect(load, []);
+
+  const saveSpotify = async () => {
+    const cid = spotify.client_id.trim();
+    const secret = spotify.client_secret.trim();
+    if (!cid || !secret) {
+      setMsg("Introduce Client ID y Client Secret de Spotify.");
+      return;
+    }
+    try {
+      await api.setCredential("spotify", { client_id: cid, client_secret: secret });
+      setMsg("Spotify activado como catálogo.");
+      setSpotify({ client_id: "", client_secret: "" });
+      load();
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
+
+  const disableSpotify = async () => {
+    try {
+      await api.deleteCredential("spotify");
+      setMsg("Spotify desactivado (se usará MusicBrainz).");
+      load();
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
+
+  const saveConcurrency = async () => {
+    try {
+      const r = await api.setConcurrency(concurrency);
+      setConcurrency(r.download_concurrency);
+      setMsg(`Descargas simultáneas: ${r.download_concurrency}.`);
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
+
+  const saveLayout = async () => {
+    try {
+      const r = await api.setLayout(layout);
+      setLayout(r.download_layout);
+      setMsg("Estructura de carpetas guardada.");
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
 
   const save = async (provider: string) => {
     const field = CRED_FIELD[provider];
@@ -127,6 +201,8 @@ export default function SettingsPage() {
     setBotInputs((p) => ({ ...p, [name]: { ...(p[name] ?? {}), [key]: value } }));
 
   const paid = data?.providers.filter((p) => p.requires_credentials) ?? [];
+  const spotifyCred = data?.credentials.find((c) => c.provider === "spotify");
+  const spotifyActive = !!spotifyCred?.enabled || data?.metadata === "spotify";
 
   return (
     <div className="space-y-6">
@@ -144,6 +220,121 @@ export default function SettingsPage() {
           {msg}
         </div>
       )}
+
+      <section className="card">
+        <h2 className="mb-2 flex items-center gap-2 font-medium">
+          Catálogo (Spotify)
+          {spotifyActive ? (
+            <span className="chip border border-emerald-600/30 bg-emerald-500/15 text-emerald-300">
+              activo
+            </span>
+          ) : (
+            <span className="chip border border-slate-700 text-slate-400">MusicBrainz</span>
+          )}
+        </h2>
+        <p className="mb-3 text-sm text-slate-400">
+          Añade credenciales de Spotify (client-credentials) para fotos de artista, mejores
+          coincidencias y menos duplicados. Créalas en{" "}
+          <a
+            className="text-brand hover:underline"
+            href="https://developer.spotify.com/dashboard"
+            target="_blank"
+            rel="noreferrer"
+          >
+            developer.spotify.com
+          </a>
+          . Sin esto se usa MusicBrainz.
+        </p>
+        <div className="space-y-2">
+          <input
+            className="input w-full"
+            placeholder="Client ID"
+            value={spotify.client_id}
+            onChange={(e) => setSpotify((s) => ({ ...s, client_id: e.target.value }))}
+          />
+          <input
+            className="input w-full"
+            type="password"
+            placeholder="Client Secret"
+            value={spotify.client_secret}
+            onChange={(e) => setSpotify((s) => ({ ...s, client_secret: e.target.value }))}
+          />
+          <div className="flex gap-2">
+            <button className="btn-primary" onClick={saveSpotify}>
+              Guardar y activar
+            </button>
+            {spotifyCred?.enabled && (
+              <button className="btn-ghost" onClick={disableSpotify}>
+                Desactivar
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2 className="mb-2 font-medium">Descargas simultáneas</h2>
+        <p className="mb-3 text-sm text-slate-400">
+          Cuántas canciones se descargan a la vez. El cambio se aplica al instante, sin reiniciar.
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            className="input w-24"
+            type="number"
+            min={1}
+            max={16}
+            value={concurrency}
+            onChange={(e) => setConcurrency(Number(e.target.value))}
+          />
+          <button className="btn-primary" onClick={saveConcurrency}>
+            Guardar
+          </button>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2 className="mb-2 font-medium">Carpeta de descarga</h2>
+        <p className="mb-3 text-sm text-slate-400">
+          Estructura dentro de la biblioteca de Navidrome
+          {data?.music_library_path ? (
+            <>
+              {" "}(<code>{data.music_library_path}</code>)
+            </>
+          ) : null}
+          . Tokens disponibles: <code>{"{artist}"}</code> <code>{"{album}"}</code>{" "}
+          <code>{"{title}"}</code> <code>{"{year}"}</code>.
+        </p>
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            {LAYOUT_PRESETS.map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                className={`chip border ${
+                  layout === p.value
+                    ? "border-brand bg-brand/15 text-brand"
+                    : "border-slate-700 text-slate-300 hover:text-white"
+                }`}
+                onClick={() => setLayout(p.value)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <input
+            className="input w-full font-mono text-sm"
+            value={layout}
+            onChange={(e) => setLayout(e.target.value)}
+            placeholder="{artist}/{album}/{title}"
+          />
+          <p className="text-xs text-slate-500">
+            Ejemplo: <code>{layoutExample(layout)}</code>
+          </p>
+          <button className="btn-primary" onClick={saveLayout}>
+            Guardar
+          </button>
+        </div>
+      </section>
 
       <section className="card">
         <h2 className="mb-2 font-medium">Bots de mensajería</h2>

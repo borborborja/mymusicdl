@@ -26,7 +26,13 @@ class TiddlProvider(Provider):
         ]
 
     async def download(
-        self, track: TrackRef, *, quality: Quality, dest_dir: str, job_id: str
+        self,
+        track: TrackRef,
+        *,
+        quality: Quality,
+        dest_dir: str,
+        job_id: str,
+        filename: str | None = None,
     ) -> AsyncIterator[ProgressEvent]:
         if not self.enabled:
             raise RuntimeError("tiddl is not configured (no Tidal credentials)")

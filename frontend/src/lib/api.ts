@@ -79,6 +79,16 @@ export const api = {
     }),
   deleteCredential: (provider: string) =>
     req<unknown>(`/settings/credentials/${provider}`, { method: "DELETE" }),
+  setConcurrency: (value: number) =>
+    req<{ download_concurrency: number }>("/settings/concurrency", {
+      method: "PUT",
+      body: JSON.stringify({ value }),
+    }),
+  setLayout: (template: string) =>
+    req<{ download_layout: string }>("/settings/layout", {
+      method: "PUT",
+      body: JSON.stringify({ template }),
+    }),
 
   libraryItems: () => req<unknown[]>("/library/items"),
   rescan: () => req<unknown>("/library/rescan", { method: "POST" }),

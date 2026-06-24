@@ -55,6 +55,8 @@ class Job(Base):
     stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     result_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # None = not checked yet; True/False = confirmed present / not found in Navidrome after rescan.
+    library_confirmed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     batch_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     title: Mapped[str | None] = mapped_column(String(512), nullable=True)  # human label for the UI
     origin: Mapped[str] = mapped_column(String(16), default="web")  # web|telegram|matrix (who queued it)

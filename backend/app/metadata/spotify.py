@@ -29,15 +29,28 @@ class SpotifyMetadata(MetadataProvider):
         self._http = httpx.AsyncClient(timeout=12.0)
         self._token: str | None = None
         self._token_exp: float = 0.0
+        # Runtime overrides (set via Settings UI) take precedence over the env-configured values.
+        self._client_id: str | None = settings.spotify_client_id
+        self._client_secret: str | None = settings.spotify_client_secret
+
+    def set_credentials(self, creds: dict | None) -> None:
+        """Apply (or clear) Spotify credentials at runtime, invalidating the cached token."""
+        if creds:
+            self._client_id = creds.get("client_id") or self._client_id
+            self._client_secret = creds.get("client_secret") or self._client_secret
+        else:  # cleared → fall back to env config (disabled if none)
+            self._client_id = self.settings.spotify_client_id
+            self._client_secret = self.settings.spotify_client_secret
+        self._token, self._token_exp = None, 0.0
 
     @property
     def enabled(self) -> bool:
-        return bool(self.settings.spotify_client_id and self.settings.spotify_client_secret)
+        return bool(self._client_id and self._client_secret)
 
     async def _bearer(self) -> str:
         if self._token and time.time() < self._token_exp:
             return self._token
-        creds = f"{self.settings.spotify_client_id}:{self.settings.spotify_client_secret}"
+        creds = f"{self._client_id}:{self._client_secret}"
         auth = base64.b64encode(creds.encode()).decode()
         resp = await self._http.post(
             _TOKEN_URL,

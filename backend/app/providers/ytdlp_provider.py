@@ -54,13 +54,20 @@ class YtdlpProvider(Provider):
         ]
 
     async def download(
-        self, track: TrackRef, *, quality: Quality, dest_dir: str, job_id: str
+        self,
+        track: TrackRef,
+        *,
+        quality: Quality,
+        dest_dir: str,
+        job_id: str,
+        filename: str | None = None,
     ) -> AsyncIterator[ProgressEvent]:
         # Only follow a *YouTube* URL; a Spotify/MusicBrainz URL would break yt-dlp, so search instead.
         url = track.source_url or ""
         is_youtube = any(d in url for d in ("youtube.com", "youtu.be"))
         target = url if is_youtube else f"ytsearch1:{track.artist} {track.title}"
-        output_tpl = os.path.join(dest_dir, "%(artist)s - %(title)s.%(ext)s")
+        name_tpl = f"{filename}.%(ext)s" if filename else "%(artist)s - %(title)s.%(ext)s"
+        output_tpl = os.path.join(dest_dir, name_tpl)
         cmd = [
             self.settings.tool_bin("yt-dlp"),
             "-x",

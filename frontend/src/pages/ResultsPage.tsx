@@ -33,7 +33,7 @@ export default function ResultsPage({
         <div className="card divide-y divide-slate-800 p-0">
           {data.tracks.length === 0 && <p className="p-4 text-slate-500">Sin resultados.</p>}
           {data.tracks.map((t, i) => (
-            <div key={`${t.title}-${i}`} className="px-4">
+            <div key={`${t.isrc || t.source_url || t.title}-${t.artist}-${i}`} className="px-4">
               <TrackRow track={t} onEnqueued={(jobs) => setBanner(`${jobs.length} canción(es) en la cola`)} />
             </div>
           ))}

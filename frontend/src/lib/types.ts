@@ -73,6 +73,7 @@ export interface Job {
   stage?: string | null;
   error?: string | null;
   result_path?: string | null;
+  library_confirmed?: boolean | null;
   batch_id?: string | null;
   title?: string | null;
   origin?: string | null; // web | telegram | matrix
@@ -121,6 +122,9 @@ export interface SettingsData {
   metadata: string;
   providers: ProviderInfo[];
   credentials: Credential[];
+  download_concurrency: number;
+  download_layout: string;
+  music_library_path: string;
 }
 
 export interface DownloadItemInput {

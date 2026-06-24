@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import SourceFilter from "../components/SourceFilter";
 import { api } from "../lib/api";
@@ -14,8 +15,11 @@ const KINDS: { value: Kind; label: string }[] = [
 ];
 
 export default function SearchPage() {
-  const [q, setQ] = useState("");
-  const [kind, setKind] = useState<Kind>("song");
+  // Search state lives in the URL (?q=…&kind=…) so navigating to an album and pressing back
+  // restores the results instead of dropping the user on an empty search box.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [q, setQ] = useState(searchParams.get("q") ?? "");
+  const [kind, setKind] = useState<Kind>((searchParams.get("kind") as Kind) ?? "song");
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [metadata, setMetadata] = useState<string>("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -34,8 +38,16 @@ export default function SearchPage() {
       .catch(() => undefined);
   }, []);
 
+  // Re-run the search captured in the URL when landing here (incl. browser "back" from an album).
+  useEffect(() => {
+    const urlQ = searchParams.get("q");
+    if (urlQ && urlQ.trim() && !data) void runSearch(urlQ, (searchParams.get("kind") as Kind) ?? "song");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const runSearch = async (qv = q, kindv = kind) => {
     if (!qv.trim()) return;
+    setSearchParams({ q: qv, kind: kindv });
     setLoading(true);
     setError(null);
     try {
