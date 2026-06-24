@@ -279,6 +279,26 @@ class WorkerPool:
             self._confirm_tasks.add(t)
             t.add_done_callback(self._confirm_tasks.discard)
 
+    async def recheck(self, job_id: str) -> bool:
+        """Re-run the Navidrome confirmation for a finished download (the rescan may lag)."""
+        if self.navidrome is None:
+            return False
+        async with self.session_factory() as session:
+            job = await session.get(Job, job_id)
+            if job is None or job.kind != "download":
+                return False
+            try:
+                track = TrackRef.from_dict(json.loads(job.track_json or "{}"))
+            except Exception:
+                return False
+            job.library_confirmed = None
+            await session.commit()
+            await self._publish(job, message="Re-comprobando en Navidrome…")
+        t = asyncio.create_task(self._confirm_in_library(job_id, track))
+        self._confirm_tasks.add(t)
+        t.add_done_callback(self._confirm_tasks.discard)
+        return True
+
     async def _confirm_in_library(self, job_id: str, track: TrackRef) -> None:
         """After the post-download rescan, wait for it to settle and check the track is indexed.
 

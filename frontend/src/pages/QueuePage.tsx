@@ -2,7 +2,9 @@ import { useEffect } from "react";
 
 import ProgressBar from "../components/ProgressBar";
 import { api } from "../lib/api";
-import { setJobs, useJobs } from "../store/jobs";
+import { removeFinished, removeJob, setJobs, useJobs } from "../store/jobs";
+
+const TERMINAL = ["done", "error", "canceled"];
 
 const STATUS_STYLE: Record<string, string> = {
   queued: "text-slate-400",
@@ -21,11 +23,29 @@ export default function QueuePage() {
 
   const cancel = (id: string) => void api.cancelJob(id).catch(() => undefined);
   const retry = (id: string) => void api.retryJob(id).catch(() => undefined);
+  const recheck = (id: string) => void api.recheckJob(id).catch(() => undefined);
+  const remove = (id: string) => {
+    removeJob(id);
+    void api.deleteJob(id).catch(() => undefined);
+  };
+  const clearFinished = () => {
+    removeFinished();
+    void api.clearJobs().catch(() => undefined);
+  };
 
   if (!jobs.length) return <p className="text-slate-500">No hay descargas todavía.</p>;
 
+  const hasFinished = jobs.some((j) => TERMINAL.includes(j.status));
+
   return (
     <div className="space-y-2">
+      {hasFinished && (
+        <div className="flex justify-end">
+          <button className="btn-ghost px-2 py-1 text-xs" onClick={clearFinished}>
+            Limpiar terminadas
+          </button>
+        </div>
+      )}
       {jobs.map((j) => {
         const indeterminate = j.status === "running" && !j.progress_pct;
         return (
@@ -50,7 +70,7 @@ export default function QueuePage() {
                   {j.origin && j.origin !== "web" ? ` · vía ${j.origin}` : ""}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 <span className={`text-xs font-medium ${STATUS_STYLE[j.status] ?? "text-slate-400"}`}>
                   {j.status}
                 </span>
@@ -64,6 +84,16 @@ export default function QueuePage() {
                     Reintentar
                   </button>
                 )}
+                {TERMINAL.includes(j.status) && (
+                  <button
+                    className="btn-ghost px-2 py-1 text-xs"
+                    aria-label="Quitar"
+                    title="Quitar de la lista"
+                    onClick={() => remove(j.id)}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             </div>
             {(j.status === "running" || j.status === "queued") && (
@@ -73,21 +103,32 @@ export default function QueuePage() {
             )}
             {j.error && <p className="mt-2 whitespace-pre-wrap text-xs text-red-400">{j.error}</p>}
             {j.status === "done" && (
-              <p
-                className={`mt-1 text-xs ${
-                  j.library_confirmed === true
-                    ? "text-emerald-400"
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <span
+                  className={`text-xs ${
+                    j.library_confirmed === true
+                      ? "text-emerald-400"
+                      : j.library_confirmed === false
+                        ? "text-amber-400"
+                        : "text-slate-400"
+                  }`}
+                >
+                  {j.library_confirmed === true
+                    ? "✓ en Navidrome"
                     : j.library_confirmed === false
-                      ? "text-amber-400"
-                      : "text-slate-400"
-                }`}
-              >
-                {j.library_confirmed === true
-                  ? "✓ en Navidrome"
-                  : j.library_confirmed === false
-                    ? "⚠ aún no aparece en Navidrome"
-                    : "⏳ comprobando en Navidrome…"}
-              </p>
+                      ? "⚠ aún no aparece en Navidrome"
+                      : "⏳ comprobando en Navidrome…"}
+                </span>
+                {j.library_confirmed === false && (
+                  <button
+                    className="btn-ghost px-2 py-0.5 text-xs"
+                    title="Volver a comprobar en Navidrome"
+                    onClick={() => recheck(j.id)}
+                  >
+                    ↻ Re-comprobar
+                  </button>
+                )}
+              </div>
             )}
             {j.status === "done" && j.result_path && (
               <p className="mt-1 truncate text-xs text-slate-500">{j.result_path}</p>

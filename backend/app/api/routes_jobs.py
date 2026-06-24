@@ -7,9 +7,11 @@ from backend.app.db.engine import get_session
 from backend.app.db.models import Job
 from backend.app.deps import AuthDep, get_queue
 from backend.app.schemas.jobs import JobDTO
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 router = APIRouter()
+
+_TERMINAL = ("done", "error", "canceled")
 
 
 @router.get("/jobs", response_model=list[JobDTO])
@@ -63,3 +65,32 @@ async def retry_job(
     await session.commit()
     await queue.put(job.id)
     return job
+
+
+@router.post("/jobs/{job_id}/recheck", response_model=JobDTO)
+async def recheck_job(job_id: str, _auth: AuthDep, request: Request, session=Depends(get_session)):
+    job = await session.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    await request.app.state.worker.recheck(job_id)
+    return job
+
+
+@router.post("/jobs/clear")
+async def clear_finished_jobs(_auth: AuthDep, session=Depends(get_session)):
+    """Remove all finished (done/error/canceled) jobs; keep queued/running ones."""
+    res = await session.execute(delete(Job).where(Job.status.in_(_TERMINAL)))
+    await session.commit()
+    return {"deleted": res.rowcount or 0}
+
+
+@router.delete("/jobs/{job_id}")
+async def delete_job(job_id: str, _auth: AuthDep, session=Depends(get_session)):
+    job = await session.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status not in _TERMINAL:
+        raise HTTPException(status_code=400, detail="Cancela el trabajo antes de borrarlo")
+    await session.delete(job)
+    await session.commit()
+    return {"deleted": job_id}

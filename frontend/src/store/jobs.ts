@@ -24,6 +24,21 @@ export function setJobs(list: Job[]) {
   rebuild();
 }
 
+export function removeJob(id: string) {
+  if (jobs.delete(id)) rebuild();
+}
+
+export function removeFinished() {
+  let changed = false;
+  for (const [id, j] of jobs) {
+    if (j.status === "done" || j.status === "error" || j.status === "canceled") {
+      jobs.delete(id);
+      changed = true;
+    }
+  }
+  if (changed) rebuild();
+}
+
 function subscribe(l: () => void) {
   listeners.add(l);
   return () => {

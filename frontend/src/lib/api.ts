@@ -66,6 +66,9 @@ export const api = {
   listJobs: () => req<Job[]>("/jobs?limit=200"),
   cancelJob: (id: string) => req<Job>(`/jobs/${id}/cancel`, { method: "POST" }),
   retryJob: (id: string) => req<Job>(`/jobs/${id}/retry`, { method: "POST" }),
+  recheckJob: (id: string) => req<Job>(`/jobs/${id}/recheck`, { method: "POST" }),
+  deleteJob: (id: string) => req<{ deleted: string }>(`/jobs/${id}`, { method: "DELETE" }),
+  clearJobs: () => req<{ deleted: number }>("/jobs/clear", { method: "POST" }),
 
   tools: () => req<Tool[]>("/tools"),
   checkTools: () => req<{ status: string }>("/tools/check", { method: "POST" }),
