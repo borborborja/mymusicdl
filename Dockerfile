@@ -31,6 +31,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg tini ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
+# deno: a JS runtime yt-dlp/spotdl need to solve YouTube's JS challenges (signature / n-param).
+# Without it, some YouTube(-Music) downloads fail. Pulled from the official multi-arch binary image.
+COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
+
 COPY --from=backend-deps /install /usr/local
 
 WORKDIR /app
