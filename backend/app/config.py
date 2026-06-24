@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     download_concurrency: int = 2
     default_format: str = "mp3"
     default_bitrate: str = "320k"
+    # Folder structure under MUSIC_LIBRARY_PATH; tokens {artist}/{album}/{title}/{year}.
+    download_layout: str = "{artist}/{album}/{title}"
 
     # ── updater ──
     version_check_interval_hours: int = 24

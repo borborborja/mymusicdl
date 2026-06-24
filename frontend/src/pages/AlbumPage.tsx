@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import Artwork from "../components/Artwork";
 import TrackRow from "../components/TrackRow";
@@ -17,6 +17,7 @@ const TIER_LABELS: Record<number, string> = {
 
 export default function AlbumPage() {
   const { provider = "", id = "" } = useParams();
+  const navigate = useNavigate();
   const [detail, setDetail] = useState<AlbumDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +104,9 @@ export default function AlbumPage() {
 
   return (
     <div>
+      <button className="btn-ghost mb-3 px-2 py-1 text-sm" onClick={() => navigate(-1)}>
+        ← Volver
+      </button>
       <div className="relative overflow-hidden rounded-xl border border-slate-800">
         {detail.album.cover_url && (
           <div

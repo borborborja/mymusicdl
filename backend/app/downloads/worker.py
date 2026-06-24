@@ -13,10 +13,12 @@ import os
 
 from backend.app.config import Settings
 from backend.app.db.models import Job
+from backend.app.downloads.paths import build_dest
 from backend.app.downloads.progress import ProgressBroker
 from backend.app.downloads.queue import DownloadQueue
 from backend.app.downloads.runner import SubprocessError
 from backend.app.logging import get_logger
+from backend.app.navidrome.matcher import library_quality
 from backend.app.providers.base import Quality, TrackRef
 from backend.app.providers.registry import ProviderRegistry
 from backend.app.schemas.jobs import JobDTO
@@ -26,21 +28,24 @@ log = get_logger(__name__)
 _AUDIO_EXTS = {".mp3", ".flac", ".m4a", ".opus", ".ogg", ".wav", ".aac", ".alac"}
 
 
+def _audio_files(dest: str) -> set[str]:
+    """All audio file paths under ``dest`` (recursive — downloaders may nest by artist/album)."""
+    found: set[str] = set()
+    for root, _dirs, names in os.walk(dest):
+        for name in names:
+            if os.path.splitext(name)[1].lower() in _AUDIO_EXTS:
+                found.add(os.path.join(root, name))
+    return found
+
+
 def _pick_new_audio(dest: str, before: set[str]) -> str | None:
-    """Return the path of the largest newly-created audio file in ``dest``."""
-    try:
-        after = set(os.listdir(dest))
-    except FileNotFoundError:
-        return None
+    """Return the path of the largest newly-created audio file under ``dest``."""
     candidates = []
-    for name in after - before:
-        ext = os.path.splitext(name)[1].lower()
-        if ext in _AUDIO_EXTS:
-            full = os.path.join(dest, name)
-            try:
-                candidates.append((os.path.getsize(full), full))
-            except OSError:
-                continue
+    for full in _audio_files(dest) - before:
+        try:
+            candidates.append((os.path.getsize(full), full))
+        except OSError:
+            continue
     if not candidates:
         return None
     candidates.sort(reverse=True)
@@ -67,17 +72,67 @@ class WorkerPool:
         self._tasks: list[asyncio.Task] = []
         self._active: dict[str, asyncio.Task] = {}
         self._cancelled: set[str] = set()
+        self._confirm_tasks: set[asyncio.Task] = set()
+        self._next_idx = 0
+
+    async def _effective_concurrency(self) -> int:
+        """Persisted runtime override (Settings UI) wins over the env-driven default."""
+        from backend.app.db.repo import get_setting
+
+        try:
+            async with self.session_factory() as session:
+                raw = await get_setting(session, "download_concurrency")
+            if raw is not None:
+                return max(1, int(raw))
+        except Exception:
+            log.warning("Could not read download_concurrency override; using default", exc_info=True)
+        return max(1, self.settings.download_concurrency)
+
+    async def _download_layout(self) -> str:
+        """Persisted folder-structure template (Settings UI) or the env-driven default."""
+        from backend.app.db.repo import get_setting
+
+        try:
+            async with self.session_factory() as session:
+                raw = await get_setting(session, "download_layout")
+            if raw:
+                return raw
+        except Exception:
+            log.warning("Could not read download_layout override; using default", exc_info=True)
+        return self.settings.download_layout
+
+    def _spawn_worker(self) -> None:
+        idx = self._next_idx
+        self._next_idx += 1
+        self._tasks.append(asyncio.create_task(self._run(idx)))
 
     async def start(self) -> None:
-        n = max(1, self.settings.download_concurrency)
-        self._tasks = [asyncio.create_task(self._run(i)) for i in range(n)]
-        log.info("Worker pool started (%d workers)", n)
+        n = await self._effective_concurrency()
+        for _ in range(n):
+            self._spawn_worker()
+        log.info("Worker pool started (%d workers)", len(self._tasks))
+
+    async def set_concurrency(self, n: int) -> int:
+        """Resize the pool live. Growing spawns workers; shrinking cancels surplus ones (a job in
+        flight is re-queued, so it resumes on a remaining worker)."""
+        n = max(1, min(16, int(n)))
+        current = len(self._tasks)
+        if n > current:
+            for _ in range(n - current):
+                self._spawn_worker()
+        elif n < current:
+            surplus, self._tasks = self._tasks[n:], self._tasks[:n]
+            for t in surplus:
+                t.cancel()
+        log.info("Worker pool resized to %d workers", n)
+        return n
 
     async def stop(self) -> None:
-        for t in self._tasks:
+        for t in (*self._tasks, *self._confirm_tasks):
             t.cancel()
-        await asyncio.gather(*self._tasks, return_exceptions=True)
+        await asyncio.gather(*self._tasks, *self._confirm_tasks, return_exceptions=True)
         self._tasks.clear()
+        self._confirm_tasks.clear()
 
     def cancel(self, job_id: str) -> bool:
         """Request cancellation of a running job. Returns True if it was active."""
@@ -133,9 +188,13 @@ class WorkerPool:
                 await self._publish(job)
                 return
 
-            dest = job.dest_dir or self.settings.music_library_path
+            base = job.dest_dir or self.settings.music_library_path
+            layout = await self._download_layout()
+            dest, filename = build_dest(
+                base, layout, artist=track.artist, album=track.album, title=track.title
+            )
             os.makedirs(dest, exist_ok=True)
-            before = set(os.listdir(dest))
+            before = _audio_files(dest)
 
             job.status, job.stage, job.progress_pct, job.error = "running", "resolving", 0.0, None
             await session.commit()
@@ -144,7 +203,7 @@ class WorkerPool:
             async def consume() -> None:
                 last_pct = -10.0
                 async for ev in provider.download(
-                    track, quality=quality, dest_dir=dest, job_id=job_id
+                    track, quality=quality, dest_dir=dest, job_id=job_id, filename=filename
                 ):
                     dirty = False
                     if ev.stage and ev.stage != job.stage:
@@ -173,10 +232,12 @@ class WorkerPool:
                         await session.commit()
                         await self._publish(job)
                     return
-                # Pool shutdown mid-job → leave it queued so the next boot resumes it.
+                # Pool shutdown / down-resize mid-job → requeue so a remaining worker (or the next
+                # boot's rehydrate) resumes it instead of losing it.
                 job.status, job.stage = "queued", None
                 with contextlib.suppress(Exception):
                     await session.commit()
+                    await self.queue.put(job_id)
                 raise
             except SubprocessError as exc:
                 job.status, job.error, job.stage = "error", str(exc)[:4000], "error"
@@ -211,3 +272,54 @@ class WorkerPool:
                 )
             except Exception:
                 log.exception("library bookkeeping failed for job %s", job_id)
+
+        # ── confirm in Navidrome (detached: don't hold the worker slot during the rescan) ──
+        if self.navidrome is not None:
+            t = asyncio.create_task(self._confirm_in_library(job_id, track))
+            self._confirm_tasks.add(t)
+            t.add_done_callback(self._confirm_tasks.discard)
+
+    async def _confirm_in_library(self, job_id: str, track: TrackRef) -> None:
+        """After the post-download rescan, wait for it to settle and check the track is indexed.
+
+        Sets ``job.library_confirmed`` (True/False) and publishes it so the queue can show whether
+        the file actually made it into Navidrome — not just that a download finished.
+        """
+        try:
+            # Give the rescan time to settle: poll scanStatus, then fall back to a fixed wait.
+            for _ in range(15):  # ~30s max
+                try:
+                    status = await self.navidrome.get_scan_status()
+                except Exception:
+                    break
+                if not status.get("scanning"):
+                    break
+                await asyncio.sleep(2)
+
+            match = await library_quality(
+                self.navidrome,
+                artist=track.artist,
+                title=track.title,
+                album=track.album,
+                duration_s=track.duration_s,
+            )
+            confirmed = match is not None
+
+            async with self.session_factory() as session:
+                job = await session.get(Job, job_id)
+                if job is None:
+                    return
+                job.library_confirmed = confirmed
+                await session.commit()
+                await self._publish(
+                    job,
+                    message=(
+                        "Confirmada en Navidrome"
+                        if confirmed
+                        else "Descargada, pero aún no aparece en Navidrome"
+                    ),
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Navidrome confirmation failed for job %s", job_id)

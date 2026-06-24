@@ -38,7 +38,10 @@ async def init_db() -> None:
 # creates missing tables — it never ALTERs existing ones — so a DB created before a column was
 # introduced needs this. (Alembic remains available for anything more involved.)
 _ADDED_COLUMNS: dict[str, dict[str, str]] = {
-    "jobs": {"origin": "VARCHAR(16) DEFAULT 'web'"},
+    "jobs": {
+        "origin": "VARCHAR(16) DEFAULT 'web'",
+        "library_confirmed": "BOOLEAN",
+    },
 }
 
 

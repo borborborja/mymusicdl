@@ -38,11 +38,18 @@ class SpotdlProvider(Provider):
         ]
 
     async def download(
-        self, track: TrackRef, *, quality: Quality, dest_dir: str, job_id: str
+        self,
+        track: TrackRef,
+        *,
+        quality: Quality,
+        dest_dir: str,
+        job_id: str,
+        filename: str | None = None,
     ) -> AsyncIterator[ProgressEvent]:
         fmt = self.settings.default_format
         bitrate = self.settings.default_bitrate
-        output_tpl = os.path.join(dest_dir, "{artists} - {title}.{output-ext}")
+        name_tpl = f"{filename}.{{output-ext}}" if filename else "{artists} - {title}.{output-ext}"
+        output_tpl = os.path.join(dest_dir, name_tpl)
         cmd = [
             self.settings.tool_bin("spotdl"),
             "download",

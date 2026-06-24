@@ -72,6 +72,23 @@ export default function QueuePage() {
               </div>
             )}
             {j.error && <p className="mt-2 whitespace-pre-wrap text-xs text-red-400">{j.error}</p>}
+            {j.status === "done" && (
+              <p
+                className={`mt-1 text-xs ${
+                  j.library_confirmed === true
+                    ? "text-emerald-400"
+                    : j.library_confirmed === false
+                      ? "text-amber-400"
+                      : "text-slate-400"
+                }`}
+              >
+                {j.library_confirmed === true
+                  ? "✓ en Navidrome"
+                  : j.library_confirmed === false
+                    ? "⚠ aún no aparece en Navidrome"
+                    : "⏳ comprobando en Navidrome…"}
+              </p>
+            )}
             {j.status === "done" && j.result_path && (
               <p className="mt-1 truncate text-xs text-slate-500">{j.result_path}</p>
             )}

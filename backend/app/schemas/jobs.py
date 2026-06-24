@@ -40,6 +40,7 @@ class JobDTO(BaseModel):
     stage: str | None = None
     error: str | None = None
     result_path: str | None = None
+    library_confirmed: bool | None = None
     batch_id: str | None = None
     title: str | None = None
     origin: str = "web"

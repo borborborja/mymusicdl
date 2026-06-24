@@ -13,7 +13,7 @@ from backend.app.logging import get_logger
 from backend.app.metadata.base import MetadataProvider
 from backend.app.metadata.musicbrainz import MusicBrainzMetadata
 from backend.app.metadata.spotify import SpotifyMetadata
-from backend.app.navidrome.matcher import library_quality
+from backend.app.navidrome.matcher import library_quality, norm
 from backend.app.providers.base import Quality, TrackRef
 from backend.app.providers.registry import ProviderRegistry
 from backend.app.schemas.search import (
@@ -28,6 +28,46 @@ from backend.app.schemas.search import (
 )
 
 log = get_logger(__name__)
+
+
+# ── result de-duplication ──
+# Metadata sources (notably the keyless MusicBrainz fallback) return the same artist many times —
+# distinct MBIDs / disambiguations that all share a name. Collapse by a stable key, keeping the
+# first hit (sources return by relevance), so the UI doesn't show a wall of repeats.
+def _dedup_artists(artists):
+    seen: set[str] = set()
+    out = []
+    for a in artists:
+        key = norm(a.name)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(a)
+    return out
+
+
+def _dedup_albums(albums):
+    seen: set[str] = set()
+    out = []
+    for a in albums:
+        key = f"{a.provider}:{a.id}"
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(a)
+    return out
+
+
+def _dedup_tracks(tracks):
+    seen: set[str] = set()
+    out = []
+    for t in tracks:
+        key = (t.isrc or "").strip().lower() or f"{norm(t.title)}|{norm(t.artist)}"
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+    return out
 
 
 class SearchAggregator:
@@ -54,6 +94,10 @@ class SearchAggregator:
 
     def metadata_name(self) -> str:
         return self._active_metadata().name
+
+    def set_spotify_credentials(self, creds: dict | None) -> None:
+        """Apply/clear Spotify catalog credentials at runtime (no restart needed)."""
+        self._spotify.set_credentials(creds)
 
     # ── decoration ──
     async def _decorate(
@@ -140,10 +184,12 @@ class SearchAggregator:
             tracks = await md.search_tracks(query, limit)
             return SearchResponseDTO(
                 kind="song",
-                tracks=await self._decorate_many(tracks, providers_filter, lossless_only),
+                tracks=await self._decorate_many(
+                    _dedup_tracks(tracks), providers_filter, lossless_only
+                ),
             )
         if kind == "album":
-            albums = await md.search_albums(query, limit)
+            albums = _dedup_albums(await md.search_albums(query, limit))
             return SearchResponseDTO(
                 kind="album",
                 albums=[
@@ -160,7 +206,7 @@ class SearchAggregator:
                 ],
             )
         if kind == "artist":
-            artists = await md.search_artists(query, limit)
+            artists = _dedup_artists(await md.search_artists(query, limit))
             return SearchResponseDTO(
                 kind="artist",
                 artists=[
