@@ -43,7 +43,7 @@ export default function TrackRow({
   };
 
   return (
-    <div className="flex items-center gap-3 border-b border-slate-800 py-2">
+    <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 py-2">
       {selectable && (
         <input
           type="checkbox"
@@ -73,11 +73,11 @@ export default function TrackRow({
           <LibraryBadge library={track.library} />
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto">
         {options.length ? (
           <>
             <select
-              className="input py-1"
+              className="input min-w-0 flex-1 py-1 sm:flex-none"
               value={value}
               onChange={(e) => setValue(e.target.value)}
             >

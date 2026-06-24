@@ -143,9 +143,9 @@ export default function AlbumPage() {
           {allSelected ? "Quitar selección" : "Seleccionar todo"}
         </button>
         <span className="text-sm text-slate-400">{selected.size} seleccionadas</span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
           <select
-            className="input py-1"
+            className="input min-w-0 flex-1 py-1 sm:flex-none"
             value={batchProvider}
             onChange={(e) => setBatchProvider(e.target.value)}
           >
@@ -156,7 +156,7 @@ export default function AlbumPage() {
             ))}
           </select>
           <select
-            className="input py-1"
+            className="input min-w-0 flex-1 py-1 sm:flex-none"
             value={batchTier}
             onChange={(e) => setBatchTier(Number(e.target.value))}
           >

@@ -17,18 +17,19 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-full">
       <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/80 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <span aria-hidden>🎵</span> mymusicdl
+        <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 py-3 sm:px-4">
+          <div className="flex shrink-0 items-center gap-2 text-base font-semibold sm:text-lg">
+            <span aria-hidden>🎵</span>
+            <span>mymusicdl</span>
           </div>
-          <nav className="flex items-center gap-1">
+          <nav className="flex min-w-0 flex-1 items-center justify-end gap-0.5 overflow-x-auto whitespace-nowrap sm:gap-1">
             {tabs.map((t) => (
               <NavLink
                 key={t.to}
                 to={t.to}
                 end={t.end}
                 className={({ isActive }) =>
-                  `relative rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  `relative shrink-0 rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
                     isActive ? "bg-slate-800 text-white" : "text-slate-300 hover:bg-slate-800/60"
                   }`
                 }
@@ -44,7 +45,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6">{children}</main>
     </div>
   );
 }
