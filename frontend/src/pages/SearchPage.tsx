@@ -22,8 +22,12 @@ export default function SearchPage() {
   const [kind, setKind] = useState<Kind>((searchParams.get("kind") as Kind) ?? "song");
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [metadata, setMetadata] = useState<string>("");
-  const [selected, setSelected] = useState<string[]>([]);
-  const [losslessOnly, setLosslessOnly] = useState(false);
+  const [selected, setSelected] = useState<string[]>(() => {
+    const p = searchParams.get("providers");
+    return p ? p.split(",").filter(Boolean) : [];
+  });
+  const [losslessOnly, setLosslessOnly] = useState(searchParams.get("lossless") === "1");
+  const [limit, setLimit] = useState(() => Number(searchParams.get("limit")) || 20);
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,11 +51,15 @@ export default function SearchPage() {
 
   const runSearch = async (qv = q, kindv = kind) => {
     if (!qv.trim()) return;
-    setSearchParams({ q: qv, kind: kindv });
+    const params: Record<string, string> = { q: qv, kind: kindv };
+    if (selected.length) params.providers = selected.join(",");
+    if (losslessOnly) params.lossless = "1";
+    if (limit !== 20) params.limit = String(limit);
+    setSearchParams(params);
     setLoading(true);
     setError(null);
     try {
-      const res = await api.search({ q: qv, kind: kindv, providers: selected, losslessOnly });
+      const res = await api.search({ q: qv, kind: kindv, providers: selected, losslessOnly, limit });
       setData(res);
     } catch (e) {
       setError((e as Error).message);
@@ -105,13 +113,29 @@ export default function SearchPage() {
           ))}
         </div>
 
-        <SourceFilter
-          providers={providers}
-          selected={selected}
-          onSelected={setSelected}
-          losslessOnly={losslessOnly}
-          onLossless={setLosslessOnly}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <SourceFilter
+            providers={providers}
+            selected={selected}
+            onSelected={setSelected}
+            losslessOnly={losslessOnly}
+            onLossless={setLosslessOnly}
+          />
+          <label className="ml-auto flex items-center gap-1.5 text-sm text-slate-400">
+            Resultados
+            <select
+              className="input py-1"
+              value={limit}
+              onChange={(e) => setLimit(Number(e.target.value))}
+            >
+              {[20, 40, 60, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         {metadata === "musicbrainz" && (
           <p className="text-xs text-slate-500">

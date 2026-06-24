@@ -59,9 +59,21 @@ class Updater:
                     await self.check_all()
                 except Exception:
                     log.exception("periodic version check failed")
+                try:
+                    await self._prune_jobs()
+                except Exception:
+                    log.exception("periodic job prune failed")
                 await asyncio.sleep(max(1, self.settings.version_check_interval_hours) * 3600)
         except asyncio.CancelledError:
             pass
+
+    async def _prune_jobs(self) -> None:
+        from backend.app.db.repo import prune_old_jobs
+
+        async with self.session_factory() as session:
+            removed = await prune_old_jobs(session, self.settings.job_retention_days)
+        if removed:
+            log.info("Pruned %d old finished job(s)", removed)
 
     async def check_all(self) -> None:
         async with self.session_factory() as session:

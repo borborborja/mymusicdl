@@ -79,6 +79,9 @@ export interface Job {
   origin?: string | null; // web | telegram | matrix
   created_at?: string | null;
   updated_at?: string | null;
+  // Transient, from the live SSE event (not persisted on the backend DTO).
+  speed?: string | null;
+  eta_s?: number | null;
 }
 
 export interface BotStatus {
@@ -103,6 +106,19 @@ export interface Tool {
   changelog?: string | null;
   last_checked_at?: string | null;
   managed: boolean;
+}
+
+export interface LibraryItem {
+  id: number;
+  title: string;
+  artist: string;
+  album?: string | null;
+  fmt: string;
+  bitrate_kbps?: number | null;
+  quality_tier: number;
+  source_provider: string;
+  file_path: string;
+  downloaded_at?: string | null;
 }
 
 export interface ProviderInfo {

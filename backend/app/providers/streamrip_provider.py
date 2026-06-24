@@ -55,8 +55,12 @@ class StreamripProvider(Provider):
         if not self.enabled:
             raise RuntimeError(f"{self.label} is not configured (no credentials)")
         effective = Quality(min(int(quality), int(self.max_quality)))
+        # --folder makes streamrip write into the per-track destination the worker prepared (inside
+        # the Navidrome music volume) instead of whatever its config.toml points at.
         cmd = [
             self.settings.tool_bin("rip"),
+            "--folder",
+            dest_dir,
             "--quality",
             str(int(effective)),
             "url",

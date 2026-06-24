@@ -5,6 +5,7 @@ import { useJobs } from "../store/jobs";
 
 const tabs = [
   { to: "/", label: "Buscar", end: true },
+  { to: "/library", label: "Biblioteca" },
   { to: "/queue", label: "Descargas" },
   { to: "/tools", label: "Herramientas" },
   { to: "/settings", label: "Ajustes" },

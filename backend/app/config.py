@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     default_bitrate: str = "320k"
     # Folder structure under MUSIC_LIBRARY_PATH; tokens {artist}/{album}/{title}/{year}.
     download_layout: str = "{artist}/{album}/{title}"
+    # Auto-delete finished (done/error/canceled) download jobs older than this. 0 disables pruning.
+    job_retention_days: int = 30
 
     # ── updater ──
     version_check_interval_hours: int = 24

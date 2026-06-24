@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import ProgressBar from "../components/ProgressBar";
 import { api } from "../lib/api";
+import { formatDuration } from "../lib/util";
 import { removeFinished, removeJob, setJobs, useJobs } from "../store/jobs";
 
 const TERMINAL = ["done", "error", "canceled"];
@@ -32,18 +33,31 @@ export default function QueuePage() {
     removeFinished();
     void api.clearJobs().catch(() => undefined);
   };
+  const recheckAll = () => {
+    jobs
+      .filter((j) => j.status === "done" && j.library_confirmed === false)
+      .forEach((j) => void api.recheckJob(j.id).catch(() => undefined));
+  };
 
   if (!jobs.length) return <p className="text-slate-500">No hay descargas todavía.</p>;
 
   const hasFinished = jobs.some((j) => TERMINAL.includes(j.status));
+  const hasUnconfirmed = jobs.some((j) => j.status === "done" && j.library_confirmed === false);
 
   return (
     <div className="space-y-2">
-      {hasFinished && (
-        <div className="flex justify-end">
-          <button className="btn-ghost px-2 py-1 text-xs" onClick={clearFinished}>
-            Limpiar terminadas
-          </button>
+      {(hasFinished || hasUnconfirmed) && (
+        <div className="flex flex-wrap justify-end gap-2">
+          {hasUnconfirmed && (
+            <button className="btn-ghost px-2 py-1 text-xs" onClick={recheckAll}>
+              ↻ Comprobar todas en Navidrome
+            </button>
+          )}
+          {hasFinished && (
+            <button className="btn-ghost px-2 py-1 text-xs" onClick={clearFinished}>
+              Limpiar terminadas
+            </button>
+          )}
         </div>
       )}
       {jobs.map((j) => {
@@ -99,6 +113,13 @@ export default function QueuePage() {
             {(j.status === "running" || j.status === "queued") && (
               <div className="mt-2">
                 <ProgressBar pct={j.progress_pct} indeterminate={indeterminate} />
+                {j.status === "running" && (j.speed || j.eta_s != null) && (
+                  <div className="mt-1 text-xs text-slate-500">
+                    {j.speed ? <span>{j.speed}</span> : null}
+                    {j.speed && j.eta_s != null ? " · " : ""}
+                    {j.eta_s != null ? <span>ETA {formatDuration(j.eta_s)}</span> : null}
+                  </div>
+                )}
               </div>
             )}
             {j.error && <p className="mt-2 whitespace-pre-wrap text-xs text-red-400">{j.error}</p>}

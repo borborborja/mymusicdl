@@ -98,7 +98,7 @@ async def set_credential(
         cred.data_json, cred.enabled, cred.status = encrypted, True, "untested"
     await session.commit()
     if is_metadata:
-        request.app.state.aggregator.set_spotify_credentials(body.data)
+        _apply_spotify(request, body.data)
     else:
         registry.set_credentials(provider, body.data)
     return {"provider": provider, "enabled": True}
@@ -113,7 +113,15 @@ async def delete_credential(
         cred.enabled = False
         await session.commit()
     if provider in _METADATA_PROVIDERS:
-        request.app.state.aggregator.set_spotify_credentials(None)
+        _apply_spotify(request, None)
     else:
         request.app.state.registry.set_credentials(provider, None)
     return {"provider": provider, "enabled": False}
+
+
+def _apply_spotify(request: Request, data: dict | None) -> None:
+    """Apply Spotify creds to both the search catalog and the spotdl downloader."""
+    request.app.state.aggregator.set_spotify_credentials(data)
+    sp = request.app.state.registry.get("spotdl")
+    if sp is not None and hasattr(sp, "set_spotify_credentials"):
+        sp.set_spotify_credentials(data)

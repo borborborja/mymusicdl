@@ -5,10 +5,13 @@ queries that are reused in more than one place.
 """
 from __future__ import annotations
 
-from sqlalchemy import select
+from datetime import timedelta
+
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.db.models import AppSetting, LibraryItem, Tool
+from backend.app.db.base import utcnow
+from backend.app.db.models import AppSetting, Job, LibraryItem, Tool
 
 
 # ── settings (key/value) ──
@@ -24,6 +27,23 @@ async def set_setting(session: AsyncSession, key: str, value: str) -> None:
     else:
         row.value = value
     await session.commit()
+
+
+# ── jobs ──
+async def prune_old_jobs(session: AsyncSession, retention_days: int) -> int:
+    """Delete finished download jobs older than ``retention_days``. Returns rows removed (0 if off)."""
+    if retention_days <= 0:
+        return 0
+    cutoff = utcnow() - timedelta(days=retention_days)
+    res = await session.execute(
+        delete(Job).where(
+            Job.kind == "download",
+            Job.status.in_(("done", "error", "canceled")),
+            Job.updated_at < cutoff,
+        )
+    )
+    await session.commit()
+    return res.rowcount or 0
 
 
 # ── tools ──

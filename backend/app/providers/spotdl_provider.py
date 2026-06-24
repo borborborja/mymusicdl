@@ -26,6 +26,19 @@ class SpotdlProvider(Provider):
     label = "spotDL (Spotify → YouTube Music)"
     requires_credentials = False
 
+    # Spotify app credentials (env or set at runtime from Settings). When present, spotdl is told to
+    # use the official Spotify API for better track resolution; otherwise it uses its keyless default.
+    _spotify_creds: dict | None = None
+
+    def set_spotify_credentials(self, creds: dict | None) -> None:
+        self._spotify_creds = creds or None
+
+    def _spotify_id_secret(self) -> tuple[str | None, str | None]:
+        creds = self._spotify_creds or {}
+        cid = creds.get("client_id") or self.settings.spotify_client_id
+        secret = creds.get("client_secret") or self.settings.spotify_client_secret
+        return cid, secret
+
     async def get_qualities(self, track: TrackRef) -> list[QualityOption]:
         fmt = self.settings.default_format
         return [
@@ -62,6 +75,11 @@ class SpotdlProvider(Provider):
             bitrate,
             "--print-errors",
         ]
+        # With Spotify credentials, prefer the official API (better matches; recent spotdl defaults
+        # to a reduced keyless client otherwise).
+        cid, secret = self._spotify_id_secret()
+        if cid and secret:
+            cmd += ["--use-official-api", "--client-id", cid, "--client-secret", secret]
 
         def parse(line: str) -> ProgressEvent | None:
             low = line.lower()
