@@ -85,13 +85,13 @@ export default function SearchPage() {
       >
         <div className="flex gap-2">
           <input
-            className="input flex-1"
+            className="input min-w-0 flex-1"
             placeholder="Artista, álbum o canción…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             autoFocus
           />
-          <button type="submit" className="btn-primary" disabled={loading}>
+          <button type="submit" className="btn-primary shrink-0" disabled={loading}>
             Buscar
           </button>
         </div>
