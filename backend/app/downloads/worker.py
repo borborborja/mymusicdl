@@ -297,6 +297,9 @@ class WorkerPool:
             job.library_confirmed = None
             await session.commit()
             await self._publish(job, message="Re-comprobando en Navidrome…")
+        # Trigger a fresh scan first — the file may simply not have been indexed yet.
+        with contextlib.suppress(Exception):
+            await self.navidrome.start_scan()
         t = asyncio.create_task(self._confirm_in_library(job_id, track))
         self._confirm_tasks.add(t)
         t.add_done_callback(self._confirm_tasks.discard)

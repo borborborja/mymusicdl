@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import ProgressBar from "../components/ProgressBar";
 import { api } from "../lib/api";
@@ -17,6 +17,7 @@ const STATUS_STYLE: Record<string, string> = {
 
 export default function QueuePage() {
   const jobs = useJobs();
+  const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
     api.listJobs().then(setJobs).catch(() => undefined);
@@ -38,28 +39,40 @@ export default function QueuePage() {
       .filter((j) => j.status === "done" && j.library_confirmed === false)
       .forEach((j) => void api.recheckJob(j.id).catch(() => undefined));
   };
-
-  if (!jobs.length) return <p className="text-slate-500">No hay descargas todavía.</p>;
+  const reindex = () => {
+    setMsg("Reindexando Navidrome…");
+    api
+      .rescan()
+      .then(() => setMsg("Reindexado de Navidrome solicitado."))
+      .catch((e) => setMsg((e as Error).message));
+  };
 
   const hasFinished = jobs.some((j) => TERMINAL.includes(j.status));
   const hasUnconfirmed = jobs.some((j) => j.status === "done" && j.library_confirmed === false);
 
   return (
     <div className="space-y-2">
-      {(hasFinished || hasUnconfirmed) && (
-        <div className="flex flex-wrap justify-end gap-2">
-          {hasUnconfirmed && (
-            <button className="btn-ghost px-2 py-1 text-xs" onClick={recheckAll}>
-              ↻ Comprobar todas en Navidrome
-            </button>
-          )}
-          {hasFinished && (
-            <button className="btn-ghost px-2 py-1 text-xs" onClick={clearFinished}>
-              Limpiar terminadas
-            </button>
-          )}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {hasUnconfirmed && (
+          <button className="btn-ghost px-2 py-1 text-xs" onClick={recheckAll}>
+            ↻ Comprobar todas en Navidrome
+          </button>
+        )}
+        <button className="btn-ghost px-2 py-1 text-xs" onClick={reindex}>
+          🔄 Reindexar Navidrome
+        </button>
+        {hasFinished && (
+          <button className="btn-ghost px-2 py-1 text-xs" onClick={clearFinished}>
+            Limpiar terminadas
+          </button>
+        )}
+      </div>
+      {msg && (
+        <div className="rounded-md border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm">
+          {msg}
         </div>
       )}
+      {!jobs.length && <p className="text-slate-500">No hay descargas todavía.</p>}
       {jobs.map((j) => {
         const indeterminate = j.status === "running" && !j.progress_pct;
         return (
