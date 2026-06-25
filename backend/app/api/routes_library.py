@@ -65,5 +65,5 @@ async def rescan(_auth: AuthDep, request: Request):
     navidrome = request.app.state.navidrome
     if navidrome is None:
         raise HTTPException(status_code=400, detail="Navidrome not configured")
-    status = await navidrome.start_scan()
+    status = await navidrome.start_scan(full=True)
     return {"scanning": status}

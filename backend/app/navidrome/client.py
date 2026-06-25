@@ -90,8 +90,10 @@ class NavidromeClient:
         body = await self._get("getAlbum", {"id": album_id})
         return body.get("album", {})
 
-    async def start_scan(self) -> dict:
-        body = await self._get("startScan")
+    async def start_scan(self, *, full: bool = False) -> dict:
+        # fullScan re-reads every file (slower) — used by the manual "reindex" button so newly
+        # downloaded tracks that an incremental scan missed get picked up.
+        body = await self._get("startScan", {"fullScan": "true"} if full else None)
         return body.get("scanStatus", {})
 
     async def get_scan_status(self) -> dict:
