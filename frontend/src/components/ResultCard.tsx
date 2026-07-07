@@ -18,7 +18,7 @@ export function AlbumCard({ album }: { album: AlbumResult }) {
           className="aspect-square w-full shadow-lg ring-1 ring-slate-800 transition group-hover:ring-2 group-hover:ring-brand/70"
         />
         {album.total_tracks ? (
-          <span className="absolute right-2 top-2 rounded-full bg-black/65 px-2 py-0.5 text-[11px] font-medium text-white/90 backdrop-blur">
+          <span className="absolute right-2 top-2 rounded-full bg-black/65 px-2 py-0.5 text-[11px] font-medium text-white/90 backdrop-blur-sm">
             {album.total_tracks}
           </span>
         ) : null}

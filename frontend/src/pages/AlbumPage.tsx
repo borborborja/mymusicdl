@@ -115,7 +115,7 @@ export default function AlbumPage() {
             style={{ backgroundImage: `url("${detail.album.cover_url}")` }}
           />
         )}
-        <div className="absolute inset-0 -z-10 bg-gradient-to-t from-slate-950 via-slate-950/70 to-slate-900/40" />
+        <div className="absolute inset-0 -z-10 bg-linear-to-t from-slate-950 via-slate-950/70 to-slate-900/40" />
         <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-end">
           <Artwork
             src={detail.album.cover_url}
