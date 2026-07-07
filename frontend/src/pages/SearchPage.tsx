@@ -217,7 +217,19 @@ export default function SearchPage() {
         )}
       </form>
 
-      <ResultsPage data={data} loading={loading} error={error} onArtistPick={onArtistPick} />
+      <ResultsPage
+        data={data}
+        loading={loading}
+        error={error}
+        emptyHint={
+          searchParams.get("artist")
+            ? searchParams.get("kind") === "album"
+              ? "Los discos de un artista pueden estar a nombre de su grupo (p. ej. Pau Donés → Jarabe de Palo). Prueba con el nombre del grupo, o busca sus canciones en Canciones."
+              : "Prueba con menos filtros o revisa la ortografía."
+            : undefined
+        }
+        onArtistPick={onArtistPick}
+      />
     </div>
   );
 }

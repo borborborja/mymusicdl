@@ -8,11 +8,13 @@ export default function ResultsPage({
   data,
   loading,
   error,
+  emptyHint,
   onArtistPick,
 }: {
   data: SearchResponse | null;
   loading: boolean;
   error: string | null;
+  emptyHint?: string;
   onArtistPick: (name: string) => void;
 }) {
   const [banner, setBanner] = useState<string | null>(null);
@@ -20,6 +22,13 @@ export default function ResultsPage({
   if (loading) return <p className="mt-8 text-center text-slate-400">Buscando…</p>;
   if (error) return <p className="mt-8 text-center text-red-400">{error}</p>;
   if (!data) return <p className="mt-8 text-center text-slate-500">Busca por artista, álbum o canción.</p>;
+
+  const empty = (
+    <p className="p-4 text-slate-500">
+      Sin resultados.
+      {emptyHint && <span className="block pt-1 text-sm">{emptyHint}</span>}
+    </p>
+  );
 
   return (
     <div className="mt-4">
@@ -31,7 +40,7 @@ export default function ResultsPage({
 
       {data.kind === "song" && (
         <div className="card divide-y divide-slate-800 p-0">
-          {data.tracks.length === 0 && <p className="p-4 text-slate-500">Sin resultados.</p>}
+          {data.tracks.length === 0 && empty}
           {data.tracks.map((t, i) => (
             <div key={`${t.isrc || t.source_url || t.title}-${t.artist}-${i}`} className="px-4">
               <TrackRow track={t} onEnqueued={(jobs) => setBanner(`${jobs.length} canción(es) en la cola`)} />
@@ -42,7 +51,7 @@ export default function ResultsPage({
 
       {data.kind === "album" && (
         <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {data.albums.length === 0 && <p className="text-slate-500">Sin resultados.</p>}
+          {data.albums.length === 0 && empty}
           {data.albums.map((a) => (
             <AlbumCard key={`${a.provider}-${a.id}`} album={a} />
           ))}

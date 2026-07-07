@@ -22,6 +22,12 @@ _TOKEN_URL = "https://accounts.spotify.com/api/token"
 _API = "https://api.spotify.com/v1"
 
 
+def _credit(artists: list[dict]) -> str:
+    # Full credit ("Freddie Mercury, Montserrat Caballé") — only the first artist hides
+    # why a collaboration matched an artist filter.
+    return ", ".join(a.get("name", "") for a in artists)
+
+
 def _fielded(query: str, field: str, **filters: str | None) -> str:
     """Compose a Spotify field-filtered query (``track:Creep artist:Radiohead``).
 
@@ -97,7 +103,7 @@ class SpotifyMetadata(MetadataProvider):
         return TrackRef(
             provider_id=None,
             title=item.get("name", ""),
-            artist=artists[0]["name"] if artists else "",
+            artist=_credit(artists),
             album=album.get("name"),
             source_url=(item.get("external_urls") or {}).get("spotify"),
             isrc=(item.get("external_ids") or {}).get("isrc"),
@@ -138,7 +144,7 @@ class SpotifyMetadata(MetadataProvider):
                 AlbumRef(
                     id=a["id"],
                     title=a.get("name", ""),
-                    artist=artists[0]["name"] if artists else "",
+                    artist=_credit(artists),
                     provider=self.name,
                     year=int(released) if released.isdigit() else None,
                     cover_url=images[0]["url"] if images else None,
@@ -170,7 +176,7 @@ class SpotifyMetadata(MetadataProvider):
         ref = AlbumRef(
             id=album["id"],
             title=album.get("name", ""),
-            artist=artists[0]["name"] if artists else "",
+            artist=_credit(artists),
             provider=self.name,
             year=int(year) if year.isdigit() else None,
             cover_url=images[0]["url"] if images else None,
