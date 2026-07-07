@@ -4,6 +4,7 @@ Lifespan builds the app-wide singletons (provider registry, Navidrome client, pr
 download queue + worker pool, search aggregator, updater) and starts the background workers.
 The built React SPA (when present) is served as static files with client-side-routing fallback.
 """
+
 from __future__ import annotations
 
 import json
@@ -51,7 +52,9 @@ async def _load_credentials(session, registry, aggregator, settings) -> None:
 async def lifespan(app: FastAPI):
     setup_logging()
     settings = get_settings()
-    log.info("Starting mymusicdl (data=%s music=%s)", settings.app_data_dir, settings.music_library_path)
+    log.info(
+        "Starting mymusicdl (data=%s music=%s)", settings.app_data_dir, settings.music_library_path
+    )
 
     await init_db()
 

@@ -1,4 +1,5 @@
 """Build the pip command that upgrades a tool *inside the mounted venv* so the upgrade persists."""
+
 from __future__ import annotations
 
 from backend.app.config import Settings

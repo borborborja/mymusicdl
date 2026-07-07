@@ -1,4 +1,5 @@
 """Logging setup — plain, readable lines suitable for `docker compose logs`."""
+
 from __future__ import annotations
 
 import logging

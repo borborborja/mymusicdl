@@ -1,4 +1,5 @@
 """Bot adapter contract + status DTO shared by every messaging backend."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

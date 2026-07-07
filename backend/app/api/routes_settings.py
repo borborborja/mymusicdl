@@ -1,4 +1,5 @@
 """Settings + provider credentials. Adding a credential flips a paid provider on without a restart."""
+
 from __future__ import annotations
 
 import json
@@ -63,9 +64,7 @@ async def set_concurrency_route(
 
 
 @router.put("/settings/layout")
-async def set_layout_route(
-    body: LayoutIn, _auth: AuthDep, session=Depends(get_session)
-):
+async def set_layout_route(body: LayoutIn, _auth: AuthDep, session=Depends(get_session)):
     template = body.template.strip() or DEFAULT_LAYOUT
     try:
         validate_layout(template)

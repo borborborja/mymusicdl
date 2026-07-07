@@ -4,6 +4,7 @@ App-wide singletons (provider registry, Navidrome client, progress broker, downl
 search aggregator, updater) are built once in the lifespan and stashed on ``app.state``; these
 accessors read them back for routers.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated

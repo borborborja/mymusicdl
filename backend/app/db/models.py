@@ -7,6 +7,7 @@ Five tables underpin every feature:
   settings       — key/value app config overrides
   credentials    — per-provider secrets; presence flips a paid provider to "enabled"
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -20,7 +21,9 @@ from backend.app.db.base import Base, utcnow
 class LibraryItem(Base):
     __tablename__ = "library_items"
     __table_args__ = (
-        UniqueConstraint("artist", "title", "album", "quality_tier", name="uq_library_track_quality"),
+        UniqueConstraint(
+            "artist", "title", "album", "quality_tier", name="uq_library_track_quality"
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -45,7 +48,9 @@ class Job(Base):
     __tablename__ = "jobs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)  # uuid4
-    kind: Mapped[str] = mapped_column(String(24), index=True)  # download|tool_update|rescan|version_check
+    kind: Mapped[str] = mapped_column(
+        String(24), index=True
+    )  # download|tool_update|rescan|version_check
     status: Mapped[str] = mapped_column(String(16), index=True, default="queued")
     provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     track_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # serialized TrackRef
@@ -59,7 +64,9 @@ class Job(Base):
     library_confirmed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     batch_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     title: Mapped[str | None] = mapped_column(String(512), nullable=True)  # human label for the UI
-    origin: Mapped[str] = mapped_column(String(16), default="web")  # web|telegram|matrix (who queued it)
+    origin: Mapped[str] = mapped_column(
+        String(16), default="web"
+    )  # web|telegram|matrix (who queued it)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
@@ -93,7 +100,9 @@ class AppSetting(Base):
 class Credential(Base):
     __tablename__ = "credentials"
 
-    provider: Mapped[str] = mapped_column(String(32), primary_key=True)  # tidal|qobuz|deezer|spotify
+    provider: Mapped[str] = mapped_column(
+        String(32), primary_key=True
+    )  # tidal|qobuz|deezer|spotify
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     data_json: Mapped[str] = mapped_column(Text)  # encrypted blob (see security.crypto)
     status: Mapped[str | None] = mapped_column(String(16), nullable=True)  # ok|invalid|untested

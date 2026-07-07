@@ -2,6 +2,7 @@
 
 The UI lets the user pick tracks and download them one by one or as a batch — we never fetch a whole
 album as a single blob."""
+
 from __future__ import annotations
 
 import httpx

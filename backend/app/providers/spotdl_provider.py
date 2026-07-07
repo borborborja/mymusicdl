@@ -3,6 +3,7 @@
 Resolves Spotify metadata and downloads the audio from YouTube Music, embedding rich tags. Lossy
 only (the target format/bitrate is configurable). Great single-track tagging.
 """
+
 from __future__ import annotations
 
 import os

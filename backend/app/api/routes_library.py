@@ -1,4 +1,5 @@
 """Library status: live Navidrome quality lookup, recent downloads, and manual rescan."""
+
 from __future__ import annotations
 
 from datetime import datetime

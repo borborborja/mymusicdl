@@ -5,6 +5,7 @@ A configurable template decides the folder structure *inside* the Navidrome musi
 ``MUSIC_LIBRARY_PATH`` (golden rule #2: writes must land on the volume Navidrome mounts), so the
 template only controls the structure under it and is validated to never escape that root.
 """
+
 from __future__ import annotations
 
 import os
@@ -59,9 +60,7 @@ def render_example(template: str) -> str:
     return os.path.join(dest_rel, filename) if dest_rel else filename
 
 
-def _render(
-    template: str, *, artist: str, album: str, title: str, year: str
-) -> tuple[str, str]:
+def _render(template: str, *, artist: str, album: str, title: str, year: str) -> tuple[str, str]:
     values = {"artist": artist, "album": album, "title": title, "year": year}
 
     def repl(m: re.Match) -> str:

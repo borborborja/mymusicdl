@@ -4,6 +4,7 @@ The browser opens one EventSource on ``/api/events``; the worker and updater pub
 and every connected client receives the snapshots. Heartbeat comments keep the connection alive
 through Cloudflare.
 """
+
 from __future__ import annotations
 
 import asyncio

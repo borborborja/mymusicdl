@@ -3,6 +3,7 @@
 Auth uses the salted-token scheme: ``t = md5(password + salt)`` with a fresh random ``salt`` per
 request, so the password is never sent in the clear.
 """
+
 from __future__ import annotations
 
 import hashlib

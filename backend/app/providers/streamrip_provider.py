@@ -10,6 +10,7 @@ authenticate non-interactively, the app should template that config per job (inj
 set ``downloads.folder = dest_dir``) and pass ``--config-path``. Until then a configured streamrip
 on the host works; an unconfigured one will raise a clear SubprocessError — which is expected.
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -77,7 +78,9 @@ class StreamripProvider(Provider):
                 return ProgressEvent(job_id=job_id, stage="downloading", message=line)
             return None
 
-        yield ProgressEvent(job_id=job_id, stage="resolving", message=f"Resolving with {self.label}…")
+        yield ProgressEvent(
+            job_id=job_id, stage="resolving", message=f"Resolving with {self.label}…"
+        )
         async for ev in stream_subprocess(cmd, job_id=job_id, parse=parse, settings=self.settings):
             yield ev
 

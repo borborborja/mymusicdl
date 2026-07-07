@@ -4,6 +4,7 @@ Job *state* lives in the SQLite ``jobs`` table; this class is the in-memory sign
 worker pool blocks on. On startup ``rehydrate`` re-enqueues anything left ``queued``/``running`` by
 a previous (crashed) container so no download is silently lost.
 """
+
 from __future__ import annotations
 
 import asyncio

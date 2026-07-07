@@ -1,0 +1,6 @@
+# Format-only commits, skipped by `git blame --ignore-revs-file` (or set once:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# and plain `git blame` / editor blame will skip them too).
+
+# style: reformat backend with black 26 (no functional changes)
+5504605d9b9020729fd3ff115f00b2a487a981a3

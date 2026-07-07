@@ -3,6 +3,7 @@
 Paid providers are constructed with whatever credentials exist at boot (env vars); the Settings
 route can later call ``set_credentials`` to flip one on without a restart.
 """
+
 from __future__ import annotations
 
 from backend.app.config import Settings

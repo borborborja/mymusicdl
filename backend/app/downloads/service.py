@@ -4,6 +4,7 @@ Both the web API (:mod:`routes_downloads`) and the chat bots create download job
 one ``jobs`` row per track, then a push onto the in-memory queue. Centralising it here keeps the
 ``origin`` bookkeeping (web | telegram | matrix) in one place so the UI can badge bot-queued items.
 """
+
 from __future__ import annotations
 
 import json

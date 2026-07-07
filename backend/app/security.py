@@ -2,6 +2,7 @@
 
 A Fernet key is derived from ``APP_SECRET`` so tokens (Tidal/Qobuz/Deezer) are never stored in
 plaintext. Rotating APP_SECRET invalidates stored credentials (they'd need re-entering)."""
+
 from __future__ import annotations
 
 import base64

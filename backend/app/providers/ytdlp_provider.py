@@ -3,6 +3,7 @@
 Universal fallback: extracts audio (from a URL, or a ``ytsearch1:`` query) and re-encodes to the
 configured format, embedding metadata + thumbnail. Lossy.
 """
+
 from __future__ import annotations
 
 import os

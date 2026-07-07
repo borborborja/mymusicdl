@@ -5,6 +5,7 @@ same small interface. A provider that ``requires_credentials`` stays ``enabled =
 credentials are supplied, and the registry simply hides disabled providers from search/quality
 aggregation. Turning a paid source on is therefore "add a credential", not "write code".
 """
+
 from __future__ import annotations
 
 import dataclasses

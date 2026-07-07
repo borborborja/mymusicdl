@@ -1,4 +1,5 @@
 """Health / readiness."""
+
 from __future__ import annotations
 
 import os
@@ -23,9 +24,11 @@ async def health(request: Request, settings: SettingsDep, session=Depends(get_se
         except Exception:
             navidrome_ok = False
 
-    music_writable = os.access(settings.music_library_path, os.W_OK) if os.path.isdir(
-        settings.music_library_path
-    ) else False
+    music_writable = (
+        os.access(settings.music_library_path, os.W_OK)
+        if os.path.isdir(settings.music_library_path)
+        else False
+    )
 
     return {
         "app": "ok",
