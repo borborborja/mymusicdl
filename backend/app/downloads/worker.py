@@ -139,6 +139,10 @@ class WorkerPool:
         self._tasks.clear()
         self._confirm_tasks.clear()
 
+    def stats(self) -> dict:
+        """Live pool snapshot for the health endpoint."""
+        return {"workers": len(self._tasks), "active": len(self._active)}
+
     def cancel(self, job_id: str) -> bool:
         """Request cancellation of a running job. Returns True if it was active."""
         self._cancelled.add(job_id)

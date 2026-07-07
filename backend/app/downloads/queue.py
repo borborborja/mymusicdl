@@ -28,6 +28,10 @@ class DownloadQueue:
     async def get(self) -> str:
         return await self._q.get()
 
+    def qsize(self) -> int:
+        """Jobs waiting to be picked up (not counting ones already running on a worker)."""
+        return self._q.qsize()
+
     def task_done(self) -> None:
         self._q.task_done()
 

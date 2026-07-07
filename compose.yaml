@@ -12,6 +12,16 @@ services:
     container_name: mymusicdl
     restart: unless-stopped
     env_file: .env
+    # Container health (the image also bakes a HEALTHCHECK; this makes it visible/tunable here).
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    # Optional resource caps (compose v2). Uncomment to enable on constrained hosts (e.g. a Pi):
+    # mem_limit: ${MEM_LIMIT:-1g}
+    # cpus: ${CPU_LIMIT:-2}
     environment:
       PORT: ${PORT:-8080}
       APP_DATA_DIR: /data

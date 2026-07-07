@@ -96,6 +96,30 @@ venv at `$TOOLS_VENV` and `pip install spotdl yt-dlp streamrip` into it (this ta
 Navidrome is reachable, and whether `/music` is writable. The container `HEALTHCHECK` curls that
 endpoint.
 
+## Backups
+
+All state lives in **one SQLite file**: `DATA_DIR/mymusicdl.db` (library, jobs, encrypted
+credentials, bot selections). The music files themselves are in the shared Navidrome volume, backed
+up by that stack — this DB is the only thing unique to mymusicdl.
+
+`scripts/backup_db.sh` takes a **consistent** snapshot (via `sqlite3 .backup`, safe on a live DB —
+unlike `cp`), gzips it, and keeps the newest N:
+
+```bash
+scripts/backup_db.sh [DATA_DIR] [BACKUP_DIR] [KEEP]      # defaults: ./data  $DATA_DIR/backups  14
+# homelab example, from cron:
+0 4 * * *  /opt/stacks/mymusicdl/scripts/backup_db.sh /opt/dades/mymusicdl
+# or inside the container (sqlite3 is present):
+docker exec mymusicdl /app/scripts/backup_db.sh /data
+```
+
+Restore (with the app stopped): `gunzip -c mymusicdl-YYYYMMDD-HHMMSS.db.gz > DATA_DIR/mymusicdl.db`.
+The existing `docker-volume-backup.stop-during-backup` label already pauses the container for
+volume-level backup tools; this script is for a lighter DB-only snapshot.
+
+> If you rotate `APP_SECRET`, stored credentials in any older backup become undecryptable — keep the
+> secret and the backups together.
+
 ## Homelab notes
 
 The owner's stack follows its homelab conventions — compose under `/opt/stacks/mymusicdl/`, data
