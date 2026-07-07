@@ -267,18 +267,23 @@ class MatrixBot(BotAdapter):
             return
         if sel.get("mode") == "albums":
             it = items[idx]
-            n = await self.core.enqueue_album(it["provider"], it["id"], origin=self.name)
-            if not n:
+            queued, skipped = await self.core.enqueue_album(
+                it["provider"], it["id"], origin=self.name
+            )
+            if not queued and not skipped:
                 await self._send(room_id, "No hay fuentes disponibles para ese álbum.")
                 return
-            await self._send(room_id, f"💿 {n} pista(s) de «{it['label']}» en cola.")
+            extra = f" ({skipped} ya en cola)" if skipped else ""
+            await self._send(room_id, f"💿 {queued} pista(s) de «{it['label']}» en cola{extra}.")
             return
         item = items[idx]
-        job = await self.core.enqueue_song_item(item, origin=self.name, chat_id=room_id)
-        if job is None:
-            await self._send(room_id, "No hay ninguna fuente disponible para esa pista.")
-            return
-        await self._send(room_id, f"🎵 En cola: {item['label']}")
+        status = await self.core.enqueue_song_item(item, origin=self.name, chat_id=room_id)
+        msg = {
+            "queued": f"🎵 En cola: {item['label']}",
+            "duplicate": f"⏳ Ya estaba en cola: {item['label']}",
+            "no_source": "No hay ninguna fuente disponible para esa pista.",
+        }[status]
+        await self._send(room_id, msg)
 
     async def on_job_terminal(self, job: dict) -> None:
         room_id = job.get("origin_chat")

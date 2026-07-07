@@ -27,7 +27,7 @@ async def create_downloads(
         for i in req.items
     ]
     try:
-        jobs = await enqueue_tracks(session, queue, registry, settings, items, origin="web")
+        result = await enqueue_tracks(session, queue, registry, settings, items, origin="web")
     except EnqueueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return [JobDTO.model_validate(j) for j in jobs]
+    return [JobDTO.model_validate(j) for j in result.queued]

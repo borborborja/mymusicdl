@@ -61,10 +61,24 @@ async def stream_subprocess(
         start_new_session=True,  # own process group → clean kill on cancel
     )
     tail: deque[str] = deque(maxlen=40)
+    idle_timeout = settings.download_idle_timeout_s or None
     try:
         assert proc.stdout is not None
         while True:
-            raw = await proc.stdout.readline()
+            try:
+                raw = (
+                    await asyncio.wait_for(proc.stdout.readline(), timeout=idle_timeout)
+                    if idle_timeout
+                    else await proc.stdout.readline()
+                )
+            except asyncio.TimeoutError:
+                # No output for the whole window — assume the tool hung. Raising here trips the
+                # finally block, which kills the process group and frees the worker slot.
+                raise SubprocessError(
+                    -1,
+                    f"Sin salida durante {idle_timeout}s — descarga colgada, abortada.\n"
+                    + "\n".join(tail),
+                ) from None
             if not raw:
                 break
             line = raw.decode("utf-8", errors="replace").rstrip()

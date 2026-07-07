@@ -136,26 +136,28 @@ class BotCore:
                 origin_chat=origin_chat,
             )
 
-    async def enqueue_song_item(self, item: dict, *, origin: str, chat_id: str):
-        """Queue one persisted song item (best available source). Returns the Job, or None."""
+    async def enqueue_song_item(self, item: dict, *, origin: str, chat_id: str) -> str:
+        """Queue one persisted song item. Returns 'queued' | 'duplicate' | 'no_source'."""
         opt = self._best_option(item.get("options") or [])
         if opt is None:
-            return None
+            return "no_source"
         enq = EnqueueItem(
             provider=opt["provider"], quality=opt["tier"], track=dict(item["payload"])
         )
-        jobs = await self._enqueue([enq], origin=origin, origin_chat=chat_id)
-        return jobs[0] if jobs else None
+        res = await self._enqueue([enq], origin=origin, origin_chat=chat_id)
+        if res.queued:
+            return "queued"
+        return "duplicate" if res.skipped else "no_source"
 
-    async def enqueue_album(self, provider: str, album_id: str, *, origin: str) -> int:
-        """Queue every track of an album individually (best source each). Returns count queued.
+    async def enqueue_album(self, provider: str, album_id: str, *, origin: str) -> tuple[int, int]:
+        """Queue every album track individually (best source each). Returns (queued, skipped).
 
         Album batches don't set ``origin_chat`` — the chat gets one "N queued" message up front
         instead of N terminal pings.
         """
         detail = await self.aggregator.get_album(provider, album_id)
         if detail is None:
-            return 0
+            return (0, 0)
         items: list[EnqueueItem] = []
         for track in detail.tracks:
             si = self.song_item(track)
@@ -166,6 +168,6 @@ class BotCore:
                 EnqueueItem(provider=opt["provider"], quality=opt["tier"], track=si["payload"])
             )
         if not items:
-            return 0
-        jobs = await self._enqueue(items, origin=origin, origin_chat=None)
-        return len(jobs)
+            return (0, 0)
+        res = await self._enqueue(items, origin=origin, origin_chat=None)
+        return (len(res.queued), len(res.skipped))

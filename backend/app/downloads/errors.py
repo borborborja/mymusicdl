@@ -45,6 +45,22 @@ _PATTERNS: list[tuple[tuple[str, ...], str]] = [
 ]
 
 
+# Failure signatures worth retrying: rate limits, transient network trouble, and our own
+# hung-subprocess abort. Everything else (no results, bad credentials, permissions) is terminal.
+_TRANSIENT: tuple[str, ...] = (
+    "http error 429",
+    "too many requests",
+    "sign in to confirm",
+    "not a bot",
+    "temporary failure in name resolution",
+    "connection",
+    "timed out",
+    "timeout",
+    "getaddrinfo",
+    "sin salida durante",  # our idle-timeout abort (see runner.stream_subprocess)
+)
+
+
 def humanize_error(raw: str | None) -> str:
     """Return a friendly hint when the error matches a known pattern, else the original text."""
     text = (raw or "").strip()
@@ -55,3 +71,9 @@ def humanize_error(raw: str | None) -> str:
         if any(n in low for n in needles):
             return message
     return text
+
+
+def is_transient(raw: str | None) -> bool:
+    """Whether a failure looks worth retrying (rate limit / network / hung), not terminal."""
+    low = (raw or "").lower()
+    return any(n in low for n in _TRANSIENT)

@@ -14,7 +14,7 @@ import os
 
 from backend.app.config import Settings
 from backend.app.db.models import Job
-from backend.app.downloads.errors import humanize_error
+from backend.app.downloads.errors import humanize_error, is_transient
 from backend.app.downloads.paths import build_dest
 from backend.app.downloads.progress import ProgressBroker
 from backend.app.downloads.queue import DownloadQueue
@@ -225,46 +225,79 @@ class WorkerPool:
                         await session.commit()
                     await self._publish(job, message=ev.message, speed=ev.speed, eta_s=ev.eta_s)
 
-            task = asyncio.create_task(consume())
-            self._active[job_id] = task
-            try:
-                await task
-            except asyncio.CancelledError:
-                task.cancel()
-                with contextlib.suppress(BaseException):
+            # Retry loop: a *transient* failure (429 / network / hung) is retried with exponential
+            # backoff up to download_max_retries; anything else is terminal on the first hit.
+            max_retries = max(0, int(self.settings.download_max_retries))
+            attempt = 0
+            while True:
+                task = asyncio.create_task(consume())
+                self._active[job_id] = task
+                try:
                     await task
-                if job_id in self._cancelled:
-                    self._cancelled.discard(job_id)
-                    job.status, job.stage = "canceled", "canceled"
+                    break  # success → fall through to the success block
+                except asyncio.CancelledError:
+                    task.cancel()
+                    with contextlib.suppress(BaseException):
+                        await task
+                    if job_id in self._cancelled:
+                        self._cancelled.discard(job_id)
+                        job.status, job.stage = "canceled", "canceled"
+                        with contextlib.suppress(Exception):
+                            await session.commit()
+                            await self._publish(job)
+                        return
+                    # Pool shutdown / down-resize mid-job → requeue so a remaining worker (or the
+                    # next boot's rehydrate) resumes it instead of losing it.
+                    job.status, job.stage = "queued", None
                     with contextlib.suppress(Exception):
                         await session.commit()
-                        await self._publish(job)
-                    return
-                # Pool shutdown / down-resize mid-job → requeue so a remaining worker (or the next
-                # boot's rehydrate) resumes it instead of losing it.
-                job.status, job.stage = "queued", None
-                with contextlib.suppress(Exception):
+                        await self.queue.put(job_id)
+                    raise
+                except SubprocessError as exc:
+                    if attempt < max_retries and is_transient(str(exc)):
+                        attempt += 1
+                        delay = min(30, 3 * 2 ** (attempt - 1))  # 3s, 6s, 12s, … capped 30s
+                        log.warning(
+                            "download job %s transient failure, retry %d/%d in %ds",
+                            job_id,
+                            attempt,
+                            max_retries,
+                            delay,
+                        )
+                        job.stage = f"retrying ({attempt}/{max_retries})"
+                        with contextlib.suppress(Exception):
+                            await session.commit()
+                        await self._publish(job, message=f"Reintentando ({attempt}/{max_retries})…")
+                        await asyncio.sleep(delay)
+                        if job_id in self._cancelled:  # cancelled during the backoff
+                            self._cancelled.discard(job_id)
+                            job.status, job.stage = "canceled", "canceled"
+                            with contextlib.suppress(Exception):
+                                await session.commit()
+                                await self._publish(job)
+                            return
+                        continue
+                    log.warning("download job %s failed: %s", job_id, exc)
+                    job.status, job.error, job.stage = (
+                        "error",
+                        humanize_error(str(exc))[:4000],
+                        "error",
+                    )
                     await session.commit()
-                    await self.queue.put(job_id)
-                raise
-            except SubprocessError as exc:
-                log.warning("download job %s failed: %s", job_id, exc)
-                job.status, job.error, job.stage = "error", humanize_error(str(exc))[:4000], "error"
-                await session.commit()
-                await self._publish(job)
-                return
-            except Exception as exc:  # noqa: BLE001
-                log.exception("download job %s crashed", job_id)
-                job.status, job.error, job.stage = (
-                    "error",
-                    humanize_error(repr(exc))[:4000],
-                    "error",
-                )
-                await session.commit()
-                await self._publish(job)
-                return
-            finally:
-                self._active.pop(job_id, None)
+                    await self._publish(job)
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    log.exception("download job %s crashed", job_id)
+                    job.status, job.error, job.stage = (
+                        "error",
+                        humanize_error(repr(exc))[:4000],
+                        "error",
+                    )
+                    await session.commit()
+                    await self._publish(job)
+                    return
+                finally:
+                    self._active.pop(job_id, None)
 
             # ── success ──
             job.result_path = _pick_new_audio(dest, before)
