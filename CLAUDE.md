@@ -18,7 +18,7 @@ you what's already in the library and at what quality. The downloaded file is wr
 the shared music volume Navidrome reads**, then Navidrome is asked to rescan.
 
 - **Backend:** FastAPI + Python 3.12, async SQLAlchemy 2.0 over SQLite, no Redis/Celery.
-- **Frontend:** React 18 + Vite 5 + Tailwind 3 (built into the image, served as static files).
+- **Frontend:** React 19 + Vite 8 + Tailwind 4 (built into the image, served as static files).
 - **Downloaders:** `spotdl` + `yt-dlp` (free, on by default); `streamrip` for Tidal/Qobuz/Deezer
   (paid, **disabled until credentials are added**). They run as **CLI subprocesses**, not libraries.
 - **Bots:** Telegram + Matrix mirror the web app over chat (optional).
