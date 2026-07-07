@@ -27,8 +27,9 @@ ENV PYTHONUNBUFFERED=1 \
 
 # ffmpeg: required by spotdl/yt-dlp for audio extraction/transcoding.
 # tini: reaps the download subprocesses cleanly. curl: container healthcheck.
+# sqlite3: consistent DB backups via scripts/backup_db.sh (`sqlite3 .backup`).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ffmpeg tini ca-certificates curl \
+        ffmpeg tini ca-certificates curl sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
 # deno: a JS runtime yt-dlp/spotdl need to solve YouTube's JS challenges (signature / n-param).

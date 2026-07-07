@@ -25,6 +25,7 @@ from backend.app.security import decrypt_secret
 log = get_logger(__name__)
 
 STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "static"
+_INSECURE_APP_SECRET = "dev-insecure-secret-change-me"  # must match config.Settings.app_secret
 
 
 async def _load_credentials(session, registry, aggregator, settings) -> None:
@@ -55,6 +56,12 @@ async def lifespan(app: FastAPI):
     log.info(
         "Starting mymusicdl (data=%s music=%s)", settings.app_data_dir, settings.music_library_path
     )
+    if settings.app_secret == _INSECURE_APP_SECRET:
+        log.warning(
+            "APP_SECRET is the built-in default — stored credentials are encrypted with a "
+            "publicly-known key. Set APP_SECRET to a long random value (e.g. `openssl rand -hex 32`) "
+            "in your .env before storing any Tidal/Qobuz/Deezer/bot credentials."
+        )
 
     await init_db()
 
