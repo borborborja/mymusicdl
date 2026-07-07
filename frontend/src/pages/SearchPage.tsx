@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import SourceFilter from "../components/SourceFilter";
@@ -45,6 +45,7 @@ export default function SearchPage() {
   });
   const [losslessOnly, setLosslessOnly] = useState(searchParams.get("lossless") === "1");
   const [limit, setLimit] = useState(() => Number(searchParams.get("limit")) || 20);
+  const [sort, setSort] = useState(searchParams.get("sort") ?? "relevance");
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +91,7 @@ export default function SearchPage() {
     if (selected.length) params.providers = selected.join(",");
     if (losslessOnly) params.lossless = "1";
     if (limit !== 20) params.limit = String(limit);
+    if (sort !== "relevance") params.sort = sort;
     setSearchParams(params);
     setLoading(true);
     setError(null);
@@ -111,6 +113,17 @@ export default function SearchPage() {
       setLoading(false);
     }
   };
+
+  // Year sorting is client-side over the fetched page, so flipping it doesn't re-query.
+  const sortedData = useMemo(() => {
+    if (!data || data.kind !== "album" || sort === "relevance") return data;
+    const albums = [...data.albums].sort((a, b) => {
+      if (a.year == null) return 1;
+      if (b.year == null) return -1;
+      return sort === "year_asc" ? a.year - b.year : b.year - a.year;
+    });
+    return { ...data, albums };
+  }, [data, sort]);
 
   const onArtistPick = (name: string) => {
     setQ("");
@@ -192,7 +205,21 @@ export default function SearchPage() {
             losslessOnly={losslessOnly}
             onLossless={setLosslessOnly}
           />
-          <label className="ml-auto flex items-center gap-1.5 text-sm text-slate-400">
+          {kind === "album" && (
+            <label className="ml-auto flex items-center gap-1.5 text-sm text-slate-400">
+              Ordenar
+              <select className="input py-1" value={sort} onChange={(e) => setSort(e.target.value)}>
+                <option value="relevance">Relevancia</option>
+                <option value="year_desc">Año ↓ (recientes)</option>
+                <option value="year_asc">Año ↑ (antiguos)</option>
+              </select>
+            </label>
+          )}
+          <label
+            className={`flex items-center gap-1.5 text-sm text-slate-400 ${
+              kind === "album" ? "" : "ml-auto"
+            }`}
+          >
             Resultados
             <select
               className="input py-1"
@@ -218,7 +245,7 @@ export default function SearchPage() {
       </form>
 
       <ResultsPage
-        data={data}
+        data={sortedData}
         loading={loading}
         error={error}
         emptyHint={

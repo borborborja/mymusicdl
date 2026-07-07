@@ -1,9 +1,49 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import type { AlbumResult, ArtistResult } from "../lib/types";
+import { api } from "../lib/api";
+import type { AlbumResult, ArtistResult, DownloadItemInput } from "../lib/types";
+import { bestOption, toTrackPayload } from "../lib/util";
 import Artwork from "./Artwork";
 
-export function AlbumCard({ album }: { album: AlbumResult }) {
+export function AlbumCard({
+  album,
+  onEnqueued,
+}: {
+  album: AlbumResult;
+  onEnqueued?: (message: string) => void;
+}) {
+  // Queues every track of the album individually (same as select-all on the album page) —
+  // still no whole-album blobs, just a shortcut past the detail view.
+  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+
+  const downloadAll = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (state !== "idle") return;
+    setState("busy");
+    try {
+      const detail = await api.album(album.provider, album.id);
+      const items = detail.tracks
+        .map((t): DownloadItemInput | null => {
+          const opt = bestOption(t);
+          return opt ? { provider: opt.provider, quality: opt.tier, track: toTrackPayload(t) } : null;
+        })
+        .filter((x): x is DownloadItemInput => x !== null);
+      if (!items.length) {
+        onEnqueued?.(`"${album.title}" no tiene fuentes disponibles.`);
+        setState("idle");
+        return;
+      }
+      const jobs = await api.enqueue(items);
+      onEnqueued?.(`${jobs.length} canción(es) de "${album.title}" en la cola.`);
+      setState("done");
+    } catch (err) {
+      onEnqueued?.((err as Error).message);
+      setState("idle");
+    }
+  };
+
   return (
     <Link
       to={`/album/${encodeURIComponent(album.provider)}/${encodeURIComponent(album.id)}`}
@@ -22,6 +62,21 @@ export function AlbumCard({ album }: { album: AlbumResult }) {
             {album.total_tracks}
           </span>
         ) : null}
+        <button
+          type="button"
+          onClick={downloadAll}
+          disabled={state !== "idle"}
+          title={state === "done" ? "En la cola" : "Descargar el álbum (pista a pista)"}
+          className="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/65 text-lg text-white/90 backdrop-blur-sm transition hover:bg-brand hover:text-slate-950 disabled:hover:bg-black/65 disabled:hover:text-white/90"
+        >
+          {state === "busy" ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          ) : state === "done" ? (
+            "✓"
+          ) : (
+            "↓"
+          )}
+        </button>
       </div>
       <div className="mt-2 min-w-0">
         <div className="truncate font-medium text-slate-100 group-hover:text-brand">
