@@ -1,11 +1,38 @@
 import { useState } from "react";
 
 import { api } from "../lib/api";
+import { togglePreview, usePreview } from "../lib/preview";
 import type { Job, TrackResult } from "../lib/types";
 import { bestOption, flattenOptions, formatDuration, toTrackPayload } from "../lib/util";
 import Artwork from "./Artwork";
 import LibraryBadge from "./LibraryBadge";
 import QualityBadge from "./QualityBadge";
+import { useToast } from "./Toaster";
+
+function PreviewButton({ track }: { track: TrackResult }) {
+  const st = usePreview();
+  const toast = useToast();
+  const key = `${track.artist}|${track.title}|${track.album ?? ""}`;
+  const active = st.key === key;
+  const label = active && st.status === "loading" ? "…" : active && st.status === "playing" ? "⏸" : "▶";
+  const onClick = () =>
+    void togglePreview(key, async () => (await api.preview(track)).url).catch(() =>
+      toast.error("No se pudo reproducir la vista previa."),
+    );
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Escuchar el audio real antes de descargar"
+      aria-label={active && st.status === "playing" ? "Pausar vista previa" : "Escuchar vista previa"}
+      className={`shrink-0 rounded-full border border-slate-700 px-2 py-1 text-xs ${
+        active ? "bg-brand text-slate-950" : "text-slate-300 hover:bg-slate-800"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
 
 export default function TrackRow({
   track,
@@ -74,6 +101,7 @@ export default function TrackRow({
         </div>
       </div>
       <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto">
+        <PreviewButton track={track} />
         {options.length ? (
           <>
             <select
