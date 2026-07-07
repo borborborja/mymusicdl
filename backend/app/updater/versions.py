@@ -1,4 +1,5 @@
 """Version probing: installed (from the mounted tools venv) vs latest (PyPI)."""
+
 from __future__ import annotations
 
 import asyncio

@@ -4,6 +4,7 @@ Runs a CLI tool, reads stdout line-by-line, and turns each line into a ``Progres
 provider-supplied ``parse`` callback. On cancellation (the worker cancels the consuming task) the
 child process *group* is terminated so no orphaned ffmpeg/yt-dlp lingers.
 """
+
 from __future__ import annotations
 
 import asyncio

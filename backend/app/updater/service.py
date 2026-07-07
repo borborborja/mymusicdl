@@ -4,6 +4,7 @@ Periodically (and on demand) compares each tracked tool's installed version (in 
 against PyPI, fetches the GitHub changelog, and exposes an in-app "update" that runs
 ``pip install -U`` inside that venv — streaming pip output to the SSE broker as a job.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -34,7 +35,9 @@ TRACKED_TOOLS = [
 
 
 class Updater:
-    def __init__(self, *, settings: Settings, session_factory, broker: ProgressBroker, queue=None) -> None:
+    def __init__(
+        self, *, settings: Settings, session_factory, broker: ProgressBroker, queue=None
+    ) -> None:
         self.settings = settings
         self.session_factory = session_factory
         self.broker = broker

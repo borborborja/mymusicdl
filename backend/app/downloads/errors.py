@@ -3,6 +3,7 @@
 The CLIs (spotdl / yt-dlp / streamrip) emit verbose tracebacks; surfacing the raw text in the queue
 is noise. We map a few well-known failure signatures to a friendly hint and keep the rest as-is.
 """
+
 from __future__ import annotations
 
 # (substring to look for [lowercased], friendly message)
@@ -20,7 +21,13 @@ _PATTERNS: list[tuple[tuple[str, ...], str]] = [
         "No se encontró la pista en la fuente.",
     ),
     (
-        ("temporary failure in name resolution", "connection", "timed out", "timeout", "getaddrinfo"),
+        (
+            "temporary failure in name resolution",
+            "connection",
+            "timed out",
+            "timeout",
+            "getaddrinfo",
+        ),
         "Error de red al contactar con la fuente. Revisa la conexión.",
     ),
     (

@@ -1,5 +1,6 @@
 """Post-download bookkeeping: record what we downloaded (and at what quality) and ask Navidrome to
 rescan so the file shows up in the library."""
+
 from __future__ import annotations
 
 import os
@@ -39,11 +40,7 @@ async def record_download(
         if result_path
         else settings.default_format
     )
-    size = (
-        os.path.getsize(result_path)
-        if result_path and os.path.exists(result_path)
-        else None
-    )
+    size = os.path.getsize(result_path) if result_path and os.path.exists(result_path) else None
 
     existing = (
         await session.execute(

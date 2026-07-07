@@ -4,6 +4,7 @@
 (streamrip already covers Tidal); to prefer it, swap it into ``build_registry``. Disabled until a
 Tidal credential is present.
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator

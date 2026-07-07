@@ -4,6 +4,7 @@ Config set here is stored encrypted in the DB and the affected bot is hot-reload
 A bot configured via ``.env`` takes precedence and is reported with ``source: "env"`` (read-only
 here; change it in the environment).
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request

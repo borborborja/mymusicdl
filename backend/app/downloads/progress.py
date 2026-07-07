@@ -3,6 +3,7 @@
 Each connected SSE client subscribes and gets its own bounded queue; the worker / updater publish
 plain dicts that are fanned out to every subscriber. No external broker required.
 """
+
 from __future__ import annotations
 
 import asyncio

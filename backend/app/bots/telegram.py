@@ -4,6 +4,7 @@ Send the bot a song name; it replies with a few matches as inline buttons. Tap o
 the best available quality and pings you when the download finishes. Commands are restricted to an
 allowlist of numeric user IDs; an unauthorised user is told their own ID so an admin can add it.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,7 +30,9 @@ _HELP = (
 class TelegramBot(BotAdapter):
     name = "telegram"
 
-    def __init__(self, core: BotCore, *, token: str | None, allowed_users: set[int], source: str | None) -> None:
+    def __init__(
+        self, core: BotCore, *, token: str | None, allowed_users: set[int], source: str | None
+    ) -> None:
         self.core = core
         self.token = token
         self.allowed = set(allowed_users or set())
@@ -81,7 +84,9 @@ class TelegramBot(BotAdapter):
             self._identity = "@" + (me or {}).get("username", "")  # type: ignore[union-attr]
             self._connected = True
             self._error = None
-        except Exception as exc:  # noqa: BLE001 — bad token etc.; surface in status, don't crash boot
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 — bad token etc.; surface in status, don't crash boot
             self._error = f"getMe falló: {exc}"
             log.warning("Telegram getMe failed: %s", exc)
             await self._http.aclose()
@@ -144,7 +149,9 @@ class TelegramBot(BotAdapter):
 
     def _is_allowed(self, user_id) -> bool:
         if not self.allowed:
-            return False  # empty allowlist → deny (we reply with the user's id so they can be added)
+            return (
+                False  # empty allowlist → deny (we reply with the user's id so they can be added)
+            )
         try:
             return int(user_id) in self.allowed
         except (TypeError, ValueError):
@@ -188,7 +195,9 @@ class TelegramBot(BotAdapter):
             await self._send(chat_id, _HELP)
             return
         if low in ("/estado", "/status"):
-            await self._send(chat_id, f"✅ Conectado como {self._identity}. Envíame una canción para buscar.")
+            await self._send(
+                chat_id, f"✅ Conectado como {self._identity}. Envíame una canción para buscar."
+            )
             return
         query = text[7:].strip() if low.startswith("/buscar") else text
         if not query:

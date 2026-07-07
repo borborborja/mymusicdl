@@ -1,4 +1,5 @@
 """Tool versions, changelog, and in-app updates."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request

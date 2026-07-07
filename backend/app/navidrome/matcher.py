@@ -2,6 +2,7 @@
 
 Powers the "already in library @ <quality>" badge and the re-download-to-better-quality decision.
 """
+
 from __future__ import annotations
 
 import re

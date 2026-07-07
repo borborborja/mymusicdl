@@ -4,6 +4,7 @@ N worker coroutines block on the in-memory queue, claim a ``queued`` job, run th
 download (each in a child task so it can be cancelled individually), stream progress to the broker,
 and on success detect the produced file and hand it to the library tracker.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -86,7 +87,9 @@ class WorkerPool:
             if raw is not None:
                 return max(1, int(raw))
         except Exception:
-            log.warning("Could not read download_concurrency override; using default", exc_info=True)
+            log.warning(
+                "Could not read download_concurrency override; using default", exc_info=True
+            )
         return max(1, self.settings.download_concurrency)
 
     async def _download_layout(self) -> str:
@@ -174,7 +177,11 @@ class WorkerPool:
 
             provider = self.registry.get(job.provider or "")
             if provider is None or not provider.enabled:
-                job.status, job.error, job.stage = "error", f"Provider '{job.provider}' unavailable", "error"
+                job.status, job.error, job.stage = (
+                    "error",
+                    f"Provider '{job.provider}' unavailable",
+                    "error",
+                )
                 await session.commit()
                 await self._publish(job)
                 return
@@ -248,7 +255,11 @@ class WorkerPool:
                 return
             except Exception as exc:  # noqa: BLE001
                 log.exception("download job %s crashed", job_id)
-                job.status, job.error, job.stage = "error", humanize_error(repr(exc))[:4000], "error"
+                job.status, job.error, job.stage = (
+                    "error",
+                    humanize_error(repr(exc))[:4000],
+                    "error",
+                )
                 await session.commit()
                 await self._publish(job)
                 return

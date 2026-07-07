@@ -3,6 +3,7 @@
 Kept intentionally thin: routers/services mostly use the session directly; these wrap the few
 queries that are reused in more than one place.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta

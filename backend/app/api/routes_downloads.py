@@ -1,5 +1,6 @@
 """Enqueue downloads (single track or a batch). Albums are expanded to individual tracks client-side
 and arrive here as a list of items — we never download an album as a single blob."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
