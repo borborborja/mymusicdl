@@ -7,6 +7,7 @@ download. Commands are limited to an allowlist of Matrix user IDs.
 Note: this speaks plain (unencrypted) Matrix. In an end-to-end-encrypted room the bot can't read
 messages — keep its room unencrypted, which is the default for a new non-E2E room.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -23,7 +24,7 @@ log = get_logger(__name__)
 
 _HELP = (
     "🎵 mymusicdl\n"
-    "Envíame el nombre de una canción y te muestro resultados.\n"
+    "Envíame el nombre de una canción o «artista - título» y te muestro resultados.\n"
     "Responde con el número para descargar. Comandos: !buscar <texto>, !ayuda"
 )
 
@@ -165,13 +166,13 @@ class MatrixBot(BotAdapter):
     async def _process_sync(self, data: dict) -> None:
         rooms = data.get("rooms") or {}
         # Auto-join rooms we've been invited to (commands are still allowlist-gated).
-        for invited_room in (rooms.get("invite") or {}):
+        for invited_room in rooms.get("invite") or {}:
             with contextlib.suppress(Exception):
                 await self._http.post(self._url(f"/join/{quote(invited_room, safe='')}"))
         for rid, room in (rooms.get("join") or {}).items():
             if self.room_id and rid != self.room_id:
                 continue
-            for ev in ((room.get("timeline") or {}).get("events") or []):
+            for ev in (room.get("timeline") or {}).get("events") or []:
                 if ev.get("type") != "m.room.message":
                     continue
                 content = ev.get("content") or {}
@@ -191,7 +192,9 @@ class MatrixBot(BotAdapter):
 
     async def _handle(self, room_id: str, sender: str, body: str) -> None:
         if not self._is_allowed(sender):
-            await self._send(room_id, f"🚫 No autorizado. Pide al administrador que añada tu usuario: {sender}")
+            await self._send(
+                room_id, f"🚫 No autorizado. Pide al administrador que añada tu usuario: {sender}"
+            )
             return
         low = body.lower()
         if low in ("!help", "!ayuda", "/help", "/ayuda"):
@@ -214,8 +217,10 @@ class MatrixBot(BotAdapter):
             await self._send(room_id, "Sin resultados.")
             return
         self._results[room_id] = tracks
-        lines = [f"{i + 1}. {t.artist} — {t.title}" + (f" · {t.album}" if t.album else "")
-                 for i, t in enumerate(tracks)]
+        lines = [
+            f"{i + 1}. {t.artist} — {t.title}" + (f" · {t.album}" if t.album else "")
+            for i, t in enumerate(tracks)
+        ]
         lines.append("Responde con el número para descargar.")
         await self._send(room_id, "\n".join(lines))
 

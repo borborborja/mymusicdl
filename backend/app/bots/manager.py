@@ -5,13 +5,13 @@ table (provider ``bot:telegram`` / ``bot:matrix``) set from the Settings page. T
 subscribes to the progress broker and forwards terminal download events to the bot that queued them
 (``origin``), so the chat user gets a "done/failed" message.
 """
+
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import json
 
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.bots.base import BotAdapter
 from backend.app.bots.core import BotCore
@@ -52,7 +52,9 @@ def _parse_str_csv(value) -> set[str]:
 
 
 class BotManager:
-    def __init__(self, *, settings: Settings, session_factory, broker, queue, registry, aggregator) -> None:
+    def __init__(
+        self, *, settings: Settings, session_factory, broker, queue, registry, aggregator
+    ) -> None:
         self.settings = settings
         self.session_factory = session_factory
         self.broker = broker
@@ -177,7 +179,9 @@ class BotManager:
 
     # ── settings API helpers ──
     def status(self) -> list[dict]:
-        return [self.adapters[name].status().to_dict() for name in BOT_NAMES if name in self.adapters]
+        return [
+            self.adapters[name].status().to_dict() for name in BOT_NAMES if name in self.adapters
+        ]
 
     async def save_config(self, name: str, data: dict) -> None:
         """Persist bot config (encrypted) to the DB and hot-reload the bot."""
@@ -188,7 +192,9 @@ class BotManager:
             cred = await session.get(Credential, f"bot:{name}")
             if cred is None:
                 session.add(
-                    Credential(provider=f"bot:{name}", enabled=True, data_json=encrypted, status="ok")
+                    Credential(
+                        provider=f"bot:{name}", enabled=True, data_json=encrypted, status="ok"
+                    )
                 )
             else:
                 cred.data_json, cred.enabled, cred.status = encrypted, True, "ok"

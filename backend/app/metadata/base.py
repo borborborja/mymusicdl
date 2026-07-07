@@ -4,6 +4,7 @@ The catalog search is decoupled from the download providers: Spotify (or MusicBr
 canonical artist/album/track identity; the download providers then say which qualities they can
 deliver for each track.
 """
+
 from __future__ import annotations
 
 from abc import ABC
@@ -38,10 +39,25 @@ class MetadataProvider(ABC):
     def enabled(self) -> bool:
         return True
 
-    async def search_tracks(self, query: str, limit: int = 20) -> list[TrackRef]:
+    async def search_tracks(
+        self,
+        query: str,
+        limit: int = 20,
+        *,
+        artist: str | None = None,
+        album: str | None = None,
+        year: str | None = None,
+    ) -> list[TrackRef]:
         return []
 
-    async def search_albums(self, query: str, limit: int = 20) -> list[AlbumRef]:
+    async def search_albums(
+        self,
+        query: str,
+        limit: int = 20,
+        *,
+        artist: str | None = None,
+        year: str | None = None,
+    ) -> list[AlbumRef]:
         return []
 
     async def search_artists(self, query: str, limit: int = 20) -> list[ArtistRef]:

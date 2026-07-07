@@ -1,4 +1,5 @@
 """Search by artist / album / song, with optional provider + lossless filters."""
+
 from __future__ import annotations
 
 import httpx
@@ -12,11 +13,14 @@ router = APIRouter()
 
 @router.get("/search", response_model=SearchResponseDTO)
 async def search(
-    q: str,
+    q: str = "",
     kind: str = "song",
     limit: int = 20,
     providers: str | None = None,
     lossless_only: bool = False,
+    artist: str | None = None,
+    album: str | None = None,
+    year: str | None = None,
     aggregator=Depends(get_aggregator),
 ):
     providers_filter = {p for p in providers.split(",") if p} if providers else None
@@ -27,6 +31,9 @@ async def search(
             limit=min(limit, 40),
             providers_filter=providers_filter,
             lossless_only=lossless_only,
+            artist=artist,
+            album=album,
+            year=year,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

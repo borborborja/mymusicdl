@@ -4,6 +4,7 @@ Platform-agnostic logic the Telegram/Matrix adapters reuse: run a catalog search
 downloadable source for a track, and enqueue it (tagged with the bot's ``origin``). The adapters
 own only the chat-specific formatting and transport.
 """
+
 from __future__ import annotations
 
 from backend.app.config import Settings
@@ -22,8 +23,15 @@ class BotCore:
         self.session_factory = session_factory
 
     async def search_songs(self, query: str, limit: int = 6) -> list:
-        """Return decorated track results (each carries the providers/qualities available)."""
-        resp = await self.aggregator.search(kind="song", query=query, limit=limit)
+        """Return decorated track results (each carries the providers/qualities available).
+
+        ``Artista - Canción`` messages become a fielded search (artist + title) instead of a
+        loose free-text match.
+        """
+        artist: str | None = None
+        if " - " in query:
+            artist, _, query = (part.strip() for part in query.partition(" - "))
+        resp = await self.aggregator.search(kind="song", query=query, artist=artist, limit=limit)
         return resp.tracks
 
     @staticmethod
