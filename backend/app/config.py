@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     download_layout: str = "{artist}/{album}/{title}"
     # Auto-delete finished (done/error/canceled) download jobs older than this. 0 disables pruning.
     job_retention_days: int = 30
+    # Abort a download whose subprocess emits no output for this many seconds (assume it hung and
+    # free the worker slot). 0 disables the watchdog. A healthy download prints progress often.
+    download_idle_timeout_s: int = 300
+    # Retry a download this many times on a *transient* failure (YouTube 429, network), with
+    # exponential backoff. Non-transient failures (no results, permissions) are not retried.
+    download_max_retries: int = 2
 
     # ── updater ──
     version_check_interval_hours: int = 24

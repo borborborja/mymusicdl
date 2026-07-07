@@ -274,11 +274,13 @@ class TelegramBot(BotAdapter):
             await self._send(chat_id, "Selección caducada, vuelve a buscar.")
             return
         item = items[idx]
-        job = await self.core.enqueue_song_item(item, origin=self.name, chat_id=str(chat_id))
-        if job is None:
-            await self._send(chat_id, "No hay ninguna fuente disponible para esa pista.")
-            return
-        await self._send(chat_id, f"🎵 En cola: {item['label']}")
+        status = await self.core.enqueue_song_item(item, origin=self.name, chat_id=str(chat_id))
+        msg = {
+            "queued": f"🎵 En cola: {item['label']}",
+            "duplicate": f"⏳ Ya estaba en cola: {item['label']}",
+            "no_source": "No hay ninguna fuente disponible para esa pista.",
+        }[status]
+        await self._send(chat_id, msg)
 
     async def _download_album(self, chat_id: int, idx: int) -> None:
         items = await self._selection(chat_id, "albums")
@@ -286,11 +288,12 @@ class TelegramBot(BotAdapter):
             await self._send(chat_id, "Selección caducada, vuelve a buscar.")
             return
         it = items[idx]
-        n = await self.core.enqueue_album(it["provider"], it["id"], origin=self.name)
-        if not n:
+        queued, skipped = await self.core.enqueue_album(it["provider"], it["id"], origin=self.name)
+        if not queued and not skipped:
             await self._send(chat_id, "No hay fuentes disponibles para ese álbum.")
             return
-        await self._send(chat_id, f"💿 {n} pista(s) de «{it['label']}» en cola.")
+        extra = f" ({skipped} ya en cola)" if skipped else ""
+        await self._send(chat_id, f"💿 {queued} pista(s) de «{it['label']}» en cola{extra}.")
 
     async def on_job_terminal(self, job: dict) -> None:
         chat_id = job.get("origin_chat")
