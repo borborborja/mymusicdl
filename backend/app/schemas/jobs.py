@@ -45,5 +45,6 @@ class JobDTO(BaseModel):
     batch_id: str | None = None
     title: str | None = None
     origin: str = "web"
+    origin_chat: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

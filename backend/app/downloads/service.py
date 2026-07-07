@@ -42,10 +42,13 @@ async def enqueue_tracks(
     items: list[EnqueueItem],
     *,
     origin: str = "web",
+    origin_chat: str | None = None,
 ) -> list[Job]:
     """Validate providers, persist one queued ``Job`` per item, and push them onto the queue.
 
-    Raises :class:`EnqueueError` if any provider is unknown or disabled (nothing is queued then).
+    ``origin_chat`` (a bot chat/room id) is stored on each job so the terminal-status ping can be
+    routed after a restart. Raises :class:`EnqueueError` if any provider is unknown or disabled
+    (nothing is queued then).
     """
     if not items:
         raise EnqueueError("No items to download")
@@ -73,6 +76,7 @@ async def enqueue_tracks(
             title=item.label or None,
             batch_id=batch_id,
             origin=origin,
+            origin_chat=origin_chat,
         )
         session.add(job)
         jobs.append(job)

@@ -17,15 +17,19 @@ from urllib.parse import quote
 import httpx
 
 from backend.app.bots.base import BotAdapter, BotStatus
-from backend.app.bots.core import BotCore
+from backend.app.bots.core import BotCore, split_limit
 from backend.app.logging import get_logger
 
 log = get_logger(__name__)
 
 _HELP = (
     "🎵 mymusicdl\n"
-    "Envíame el nombre de una canción o «artista - título» y te muestro resultados.\n"
-    "Responde con el número para descargar. Comandos: !buscar <texto>, !ayuda"
+    "Envíame el nombre de una canción o «artista - título» y responde con el número para descargar.\n"
+    "✅ = ya en tu biblioteca · ⬆️ = tienes una versión mejorable.\n"
+    "Comandos:\n"
+    "• !buscar <texto> [N] — canciones (N = nº de resultados, máx. 20)\n"
+    "• !album <texto> [N] — álbumes; responde con el número para descargarlo entero (pista a pista)\n"
+    "• !ayuda"
 )
 
 
@@ -57,8 +61,6 @@ class MatrixBot(BotAdapter):
         self._identity: str | None = user_id
         self._error: str | None = None
         self._since: str | None = None
-        self._results: dict[str, list] = {}  # room_id -> last search results
-        self._job_rooms: dict[str, str] = {}  # job_id -> room_id
         self._txn = 0
 
     @property
@@ -201,45 +203,86 @@ class MatrixBot(BotAdapter):
             await self._send(room_id, _HELP)
             return
         if body.isdigit():
-            await self._download_index(room_id, int(body) - 1)
+            await self._download_number(room_id, int(body))
+            return
+        if low.startswith("!album"):
+            await self._search_albums(room_id, body[6:].strip())
             return
         query = body[7:].strip() if low.startswith("!buscar") else body
-        if not query:
+        await self._search_songs(room_id, query)
+
+    async def _search_songs(self, room_id: str, raw: str) -> None:
+        if not raw:
             await self._send(room_id, "Escribe el nombre de una canción para buscar.")
             return
+        query, limit = split_limit(raw, 6)
         await self._send(room_id, f"🔎 Buscando «{query}»…")
         try:
-            tracks = await self.core.search_songs(query, limit=6)
+            tracks = await self.core.search_songs(query, limit=limit)
         except Exception as exc:  # noqa: BLE001
             await self._send(room_id, f"Error en la búsqueda: {exc}")
             return
         if not tracks:
             await self._send(room_id, "Sin resultados.")
             return
-        self._results[room_id] = tracks
-        lines = [
-            f"{i + 1}. {t.artist} — {t.title}" + (f" · {t.album}" if t.album else "")
-            for i, t in enumerate(tracks)
-        ]
+        items = [self.core.song_item(t) for t in tracks]
+        await self.core.save_selection(self.name, room_id, "songs", items)
+        lines = []
+        for i, it in enumerate(items):
+            mark = " ✅" if it["in_library"] else (" ⬆️" if it["can_upgrade"] else "")
+            extra = f" · {it['album']}" if it["album"] else ""
+            lines.append(f"{i + 1}. {it['label']}{extra}{mark}")
         lines.append("Responde con el número para descargar.")
         await self._send(room_id, "\n".join(lines))
 
-    async def _download_index(self, room_id: str, idx: int) -> None:
-        tracks = self._results.get(room_id) or []
-        if idx < 0 or idx >= len(tracks):
+    async def _search_albums(self, room_id: str, raw: str) -> None:
+        if not raw:
+            await self._send(room_id, "Escribe el nombre de un álbum o artista para buscar.")
+            return
+        query, limit = split_limit(raw, 6)
+        await self._send(room_id, f"🔎 Buscando álbumes «{query}»…")
+        try:
+            albums = await self.core.search_albums(query, limit=limit)
+        except Exception as exc:  # noqa: BLE001
+            await self._send(room_id, f"Error en la búsqueda: {exc}")
+            return
+        if not albums:
+            await self._send(room_id, "Sin resultados.")
+            return
+        items = [self.core.album_item(a) for a in albums]
+        await self.core.save_selection(self.name, room_id, "albums", items)
+        lines = []
+        for i, it in enumerate(items):
+            meta = " · ".join(str(x) for x in (it.get("year"), f"{it['total_tracks']} pistas") if x)
+            lines.append(f"{i + 1}. {it['label']}" + (f" ({meta})" if meta else ""))
+        lines.append("Responde con el número para descargar el álbum entero (pista a pista).")
+        await self._send(room_id, "\n".join(lines))
+
+    async def _download_number(self, room_id: str, number: int) -> None:
+        sel = await self.core.load_selection(self.name, room_id)
+        items = (sel or {}).get("items") or []
+        idx = number - 1
+        if not sel or idx < 0 or idx >= len(items):
             await self._send(room_id, "Selección caducada, vuelve a buscar.")
             return
-        track = tracks[idx]
-        job = await self.core.enqueue_one(track, origin=self.name)
+        if sel.get("mode") == "albums":
+            it = items[idx]
+            n = await self.core.enqueue_album(it["provider"], it["id"], origin=self.name)
+            if not n:
+                await self._send(room_id, "No hay fuentes disponibles para ese álbum.")
+                return
+            await self._send(room_id, f"💿 {n} pista(s) de «{it['label']}» en cola.")
+            return
+        item = items[idx]
+        job = await self.core.enqueue_song_item(item, origin=self.name, chat_id=room_id)
         if job is None:
             await self._send(room_id, "No hay ninguna fuente disponible para esa pista.")
             return
-        self._job_rooms[job.id] = room_id
-        await self._send(room_id, f"🎵 En cola: {track.artist} — {track.title}")
+        await self._send(room_id, f"🎵 En cola: {item['label']}")
 
     async def on_job_terminal(self, job: dict) -> None:
-        room_id = self._job_rooms.pop(job.get("id"), None)
-        if room_id is None:
+        room_id = job.get("origin_chat")
+        if not room_id:
             return
         title = job.get("title") or "pista"
         if job.get("status") == "done":
