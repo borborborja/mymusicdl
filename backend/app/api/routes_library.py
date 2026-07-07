@@ -38,11 +38,12 @@ async def match(
     title: str,
     album: str | None = None,
     duration_s: int | None = None,
+    isrc: str | None = None,
     request: Request = None,  # type: ignore[assignment]
 ):
     navidrome = request.app.state.navidrome
     found = await library_quality(
-        navidrome, artist=artist, title=title, album=album, duration_s=duration_s
+        navidrome, artist=artist, title=title, album=album, duration_s=duration_s, isrc=isrc
     )
     if not found:
         return LibraryMatchDTO(in_library=False)

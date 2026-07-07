@@ -12,6 +12,7 @@ import asyncio
 from backend.app.config import Settings
 from backend.app.logging import get_logger
 from backend.app.metadata.base import MetadataProvider
+from backend.app.metadata.cache import TTLCache
 from backend.app.metadata.musicbrainz import MusicBrainzMetadata
 from backend.app.metadata.spotify import SpotifyMetadata
 from backend.app.navidrome.matcher import library_quality, norm
@@ -29,6 +30,9 @@ from backend.app.schemas.search import (
 )
 
 log = get_logger(__name__)
+
+# Sentinel so the library cache can memoize "looked up, not in library" distinctly from a miss.
+_NO_MATCH = object()
 
 
 # ── result de-duplication ──
@@ -81,6 +85,11 @@ class SearchAggregator:
         self.session_factory = session_factory
         self._spotify = SpotifyMetadata(settings)
         self._musicbrainz = MusicBrainzMetadata(settings)
+        # Short-lived memoization: catalog results (avoid re-hitting Spotify/MusicBrainz) and
+        # per-track Navidrome library lookups (an album detail fires one per track). TTL keeps a
+        # freshly downloaded track visible on the next rescan.
+        self._search_cache = TTLCache(ttl_s=120)
+        self._library_cache = TTLCache(ttl_s=120)
 
     # ── metadata source selection ──
     def _active_metadata(self) -> MetadataProvider:
@@ -99,6 +108,29 @@ class SearchAggregator:
     def set_spotify_credentials(self, creds: dict | None) -> None:
         """Apply/clear Spotify catalog credentials at runtime (no restart needed)."""
         self._spotify.set_credentials(creds)
+        self._search_cache.clear()  # active catalog may have changed
+
+    async def _library_match(self, track: TrackRef) -> dict | None:
+        key = (
+            norm(track.artist),
+            norm(track.title),
+            norm(track.album or ""),
+            track.duration_s,
+            (track.isrc or "").upper() or None,
+        )
+        cached = self._library_cache.get(key)
+        if cached is not None:
+            return cached if cached != _NO_MATCH else None
+        match = await library_quality(
+            self.navidrome,
+            artist=track.artist,
+            title=track.title,
+            album=track.album,
+            duration_s=track.duration_s,
+            isrc=track.isrc,
+        )
+        self._library_cache.set(key, match if match is not None else _NO_MATCH)
+        return match
 
     # ── decoration ──
     async def _decorate(
@@ -131,13 +163,7 @@ class SearchAggregator:
             return None
 
         library = LibraryMatchDTO()
-        match = await library_quality(
-            self.navidrome,
-            artist=track.artist,
-            title=track.title,
-            album=track.album,
-            duration_s=track.duration_s,
-        )
+        match = await self._library_match(track)
         if match:
             qdto = QualityOptionDTO(**match["quality"].to_dict())
             library = LibraryMatchDTO(
@@ -169,6 +195,31 @@ class SearchAggregator:
         )
         return [d for d in decorated if d is not None]
 
+    async def _meta_search(
+        self,
+        md: MetadataProvider,
+        kind: str,
+        query: str,
+        limit: int,
+        *,
+        artist: str | None = None,
+        album: str | None = None,
+        year: str | None = None,
+    ) -> list:
+        """Catalog lookup with a short TTL cache (decoration stays fresh, only metadata is memoized)."""
+        key = (kind, query or "", artist or "", album or "", year or "", md.name, limit)
+        cached = self._search_cache.get(key)
+        if cached is not None:
+            return cached
+        if kind == "song":
+            res = await md.search_tracks(query, limit, artist=artist, album=album, year=year)
+        elif kind == "album":
+            res = await md.search_albums(query, limit, artist=artist, year=year)
+        else:
+            res = await md.search_artists(query, limit)
+        self._search_cache.set(key, res)
+        return res
+
     # ── public API ──
     async def search(
         self,
@@ -189,7 +240,9 @@ class SearchAggregator:
         if kind in ("song", "album") and not (query.strip() or artist or album):
             raise ValueError("Empty search: provide a query, an artist or an album")
         if kind == "song":
-            tracks = await md.search_tracks(query, limit, artist=artist, album=album, year=year)
+            tracks = await self._meta_search(
+                md, "song", query, limit, artist=artist, album=album, year=year
+            )
             return SearchResponseDTO(
                 kind="song",
                 tracks=await self._decorate_many(
@@ -197,7 +250,9 @@ class SearchAggregator:
                 ),
             )
         if kind == "album":
-            albums = _dedup_albums(await md.search_albums(query, limit, artist=artist, year=year))
+            albums = _dedup_albums(
+                await self._meta_search(md, "album", query, limit, artist=artist, year=year)
+            )
             return SearchResponseDTO(
                 kind="album",
                 albums=[
@@ -214,7 +269,7 @@ class SearchAggregator:
                 ],
             )
         if kind == "artist":
-            artists = _dedup_artists(await md.search_artists(query, limit))
+            artists = _dedup_artists(await self._meta_search(md, "artist", query, limit))
             return SearchResponseDTO(
                 kind="artist",
                 artists=[

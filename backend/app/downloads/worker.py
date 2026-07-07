@@ -339,6 +339,7 @@ class WorkerPool:
                 title=track.title,
                 album=track.album,
                 duration_s=track.duration_s,
+                isrc=track.isrc,
             )
             confirmed = match is not None
 
