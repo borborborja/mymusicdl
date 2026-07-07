@@ -37,18 +37,18 @@ def _lucene_escape(value: str) -> str:
 def _lucene(query: str, field: str, **filters: str | None) -> str:
     """Compose a fielded Lucene query (``recording:"Creep" AND artist:"Radiohead"``).
 
-    With no filters set the query passes through verbatim (free-text match as before). ``year``
-    maps to MB's ``firstreleasedate`` field. Filter values match word-by-word rather than as an
-    exact phrase: the credit "Freddie Mercury & Montserrat Caballé" must be findable with
-    "mercury caballé", where a phrase would fail on the non-adjacent words.
+    With no filters set the query passes through verbatim (free-text match as before). Filter
+    keys are MB field names for the target endpoint (``firstreleasedate`` on /recording,
+    ``date`` on /release, …). Filter values match word-by-word rather than as an exact phrase:
+    the credit "Freddie Mercury & Montserrat Caballé" must be findable with "mercury caballé",
+    where a phrase would fail on the non-adjacent words.
     """
     active = {k: v.strip() for k, v in filters.items() if v and v.strip()}
     if not active:
         return query
     parts = [f'{field}:"{_lucene_escape(query.strip())}"'] if query.strip() else []
     for key, value in active.items():
-        mb_field = "firstreleasedate" if key == "year" else key
-        parts.extend(f'{mb_field}:"{_lucene_escape(word)}"' for word in value.split())
+        parts.extend(f'{key}:"{_lucene_escape(word)}"' for word in value.split())
     return " AND ".join(parts)
 
 
@@ -83,7 +83,7 @@ class MusicBrainzMetadata(MetadataProvider):
         album: str | None = None,
         year: str | None = None,
     ) -> list[TrackRef]:
-        q = _lucene(query, "recording", artist=artist, release=album, year=year)
+        q = _lucene(query, "recording", artist=artist, release=album, firstreleasedate=year)
         data = await self._get("/recording", {"query": q, "limit": limit})
         out: list[TrackRef] = []
         for rec in data.get("recordings", []) or []:
@@ -113,19 +113,28 @@ class MusicBrainzMetadata(MetadataProvider):
         artist: str | None = None,
         year: str | None = None,
     ) -> list[AlbumRef]:
-        q = _lucene(query, "releasegroup", artist=artist, year=year)
-        data = await self._get("/release-group", {"query": q, "limit": limit})
+        # Search /release rather than /release-group: same Lucene fields, but each hit carries
+        # a track-count (the RG endpoint doesn't), so album cards can show the song count
+        # without one extra lookup per result. Collapse editions back to one card per RG.
+        q = _lucene(query, "release", artist=artist, date=year)
+        data = await self._get("/release", {"query": q, "limit": limit})
         out: list[AlbumRef] = []
-        for rg in data.get("release-groups", []) or []:
-            date = rg.get("first-release-date") or ""
+        seen: set[str] = set()
+        for rel in data.get("releases", []) or []:
+            rg_id = (rel.get("release-group") or {}).get("id")
+            if not rg_id or rg_id in seen:
+                continue
+            seen.add(rg_id)
+            date = rel.get("date") or ""
             out.append(
                 AlbumRef(
-                    id=rg["id"],
-                    title=rg.get("title", ""),
-                    artist=self._artist_credit(rg),
+                    id=rg_id,
+                    title=rel.get("title", ""),
+                    artist=self._artist_credit(rel),
                     provider=self.name,
                     year=int(date[:4]) if date[:4].isdigit() else None,
-                    cover_url=_caa_release_group(rg.get("id")),
+                    cover_url=_caa_release_group(rg_id),
+                    total_tracks=rel.get("track-count"),
                 )
             )
         return out
