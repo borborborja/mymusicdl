@@ -38,7 +38,9 @@ def _lucene(query: str, field: str, **filters: str | None) -> str:
     """Compose a fielded Lucene query (``recording:"Creep" AND artist:"Radiohead"``).
 
     With no filters set the query passes through verbatim (free-text match as before). ``year``
-    maps to MB's ``firstreleasedate`` field.
+    maps to MB's ``firstreleasedate`` field. Filter values match word-by-word rather than as an
+    exact phrase: the credit "Freddie Mercury & Montserrat Caballé" must be findable with
+    "mercury caballé", where a phrase would fail on the non-adjacent words.
     """
     active = {k: v.strip() for k, v in filters.items() if v and v.strip()}
     if not active:
@@ -46,7 +48,7 @@ def _lucene(query: str, field: str, **filters: str | None) -> str:
     parts = [f'{field}:"{_lucene_escape(query.strip())}"'] if query.strip() else []
     for key, value in active.items():
         mb_field = "firstreleasedate" if key == "year" else key
-        parts.append(f'{mb_field}:"{_lucene_escape(value)}"')
+        parts.extend(f'{mb_field}:"{_lucene_escape(word)}"' for word in value.split())
     return " AND ".join(parts)
 
 
@@ -66,8 +68,11 @@ class MusicBrainzMetadata(MetadataProvider):
 
     @staticmethod
     def _artist_credit(obj: dict) -> str:
+        # Full credit incl. join phrases ("Freddie Mercury & Montserrat Caballé",
+        # "Manu Guix feat. Pau Donés") — showing only the first artist hides why a
+        # collaboration matched an artist filter.
         ac = obj.get("artist-credit") or []
-        return ac[0]["name"] if ac else ""
+        return "".join(f"{c.get('name', '')}{c.get('joinphrase', '')}" for c in ac)
 
     async def search_tracks(
         self,
