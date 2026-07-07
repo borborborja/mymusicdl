@@ -13,7 +13,7 @@ import contextlib
 import httpx
 
 from backend.app.bots.base import BotAdapter, BotStatus
-from backend.app.bots.core import BotCore
+from backend.app.bots.core import BotCore, split_limit
 from backend.app.logging import get_logger
 
 log = get_logger(__name__)
@@ -22,8 +22,12 @@ _API = "https://api.telegram.org"
 
 _HELP = (
     "🎵 mymusicdl\n"
-    "Envíame el nombre de una canción o «artista - título» y te muestro resultados para descargar.\n\n"
-    "Comandos: /buscar <texto>, /estado, /ayuda"
+    "Envíame el nombre de una canción o «artista - título» y te muestro resultados para descargar.\n"
+    "Toca un resultado para descargarlo. ✅ = ya en tu biblioteca · ⬆️ = tienes una versión mejorable.\n\n"
+    "Comandos:\n"
+    "• /buscar <texto> [N] — canciones (N = nº de resultados, máx. 20)\n"
+    "• /album <texto> [N] — álbumes; toca uno para descargarlo entero (pista a pista)\n"
+    "• /estado, /ayuda"
 )
 
 
@@ -44,8 +48,6 @@ class TelegramBot(BotAdapter):
         self._identity: str | None = None
         self._error: str | None = None
         self._offset: int | None = None
-        self._results: dict[int, list] = {}  # chat_id -> last search results
-        self._job_chats: dict[str, int] = {}  # job_id -> chat_id
 
     @property
     def configured(self) -> bool:
@@ -169,7 +171,10 @@ class TelegramBot(BotAdapter):
             data = cq.get("data") or ""
             if data.startswith("dl:"):
                 with contextlib.suppress(ValueError):
-                    await self._download_index(chat_id, int(data[3:]))
+                    await self._download_song(chat_id, int(data[3:]))
+            elif data.startswith("al:"):
+                with contextlib.suppress(ValueError):
+                    await self._download_album(chat_id, int(data[3:]))
             return
 
         msg = upd.get("message") or upd.get("edited_message")
@@ -199,46 +204,102 @@ class TelegramBot(BotAdapter):
                 chat_id, f"✅ Conectado como {self._identity}. Envíame una canción para buscar."
             )
             return
+        if low.startswith("/album"):
+            await self._search_albums(chat_id, text[6:].strip())
+            return
         query = text[7:].strip() if low.startswith("/buscar") else text
-        if not query:
+        await self._search_songs(chat_id, query)
+
+    async def _search_songs(self, chat_id: int, raw: str) -> None:
+        if not raw:
             await self._send(chat_id, "Escribe el nombre de una canción para buscar.")
             return
+        query, limit = split_limit(raw, 6)
         await self._send(chat_id, f"🔎 Buscando «{query}»…")
         try:
-            tracks = await self.core.search_songs(query, limit=6)
+            tracks = await self.core.search_songs(query, limit=limit)
         except Exception as exc:  # noqa: BLE001
             await self._send(chat_id, f"Error en la búsqueda: {exc}")
             return
         if not tracks:
             await self._send(chat_id, "Sin resultados.")
             return
-        self._results[chat_id] = tracks
+        items = [self.core.song_item(t) for t in tracks]
+        await self.core.save_selection(self.name, str(chat_id), "songs", items)
         lines, buttons = [], []
-        for i, t in enumerate(tracks):
-            extra = f" · {t.album}" if t.album else ""
-            lines.append(f"{i + 1}. {t.artist} — {t.title}{extra}")
-            buttons.append([{"text": f"⬇️ {i + 1}. {t.title[:38]}", "callback_data": f"dl:{i}"}])
+        for i, it in enumerate(items):
+            mark = " ✅" if it["in_library"] else (" ⬆️" if it["can_upgrade"] else "")
+            extra = f" · {it['album']}" if it["album"] else ""
+            lines.append(f"{i + 1}. {it['label']}{extra}{mark}")
+            buttons.append(
+                [{"text": f"⬇️ {i + 1}. {it['label'][:40]}", "callback_data": f"dl:{i}"}]
+            )
         await self._send(chat_id, "\n".join(lines), reply_markup={"inline_keyboard": buttons})
 
-    async def _download_index(self, chat_id: int, idx: int) -> None:
-        tracks = self._results.get(chat_id) or []
-        if idx < 0 or idx >= len(tracks):
+    async def _search_albums(self, chat_id: int, raw: str) -> None:
+        if not raw:
+            await self._send(chat_id, "Escribe el nombre de un álbum o artista para buscar.")
+            return
+        query, limit = split_limit(raw, 6)
+        await self._send(chat_id, f"🔎 Buscando álbumes «{query}»…")
+        try:
+            albums = await self.core.search_albums(query, limit=limit)
+        except Exception as exc:  # noqa: BLE001
+            await self._send(chat_id, f"Error en la búsqueda: {exc}")
+            return
+        if not albums:
+            await self._send(chat_id, "Sin resultados.")
+            return
+        items = [self.core.album_item(a) for a in albums]
+        await self.core.save_selection(self.name, str(chat_id), "albums", items)
+        lines, buttons = [], []
+        for i, it in enumerate(items):
+            meta = " · ".join(str(x) for x in (it.get("year"), f"{it['total_tracks']} pistas") if x)
+            lines.append(f"{i + 1}. {it['label']}" + (f" ({meta})" if meta else ""))
+            buttons.append(
+                [{"text": f"💿 {i + 1}. {it['label'][:40]}", "callback_data": f"al:{i}"}]
+            )
+        lines.append("Toca un álbum para descargarlo entero (pista a pista).")
+        await self._send(chat_id, "\n".join(lines), reply_markup={"inline_keyboard": buttons})
+
+    async def _selection(self, chat_id: int, mode: str) -> list[dict] | None:
+        sel = await self.core.load_selection(self.name, str(chat_id))
+        if not sel or sel.get("mode") != mode:
+            return None
+        return sel.get("items") or []
+
+    async def _download_song(self, chat_id: int, idx: int) -> None:
+        items = await self._selection(chat_id, "songs")
+        if items is None or idx < 0 or idx >= len(items):
             await self._send(chat_id, "Selección caducada, vuelve a buscar.")
             return
-        track = tracks[idx]
-        job = await self.core.enqueue_one(track, origin=self.name)
+        item = items[idx]
+        job = await self.core.enqueue_song_item(item, origin=self.name, chat_id=str(chat_id))
         if job is None:
             await self._send(chat_id, "No hay ninguna fuente disponible para esa pista.")
             return
-        self._job_chats[job.id] = chat_id
-        await self._send(chat_id, f"🎵 En cola: {track.artist} — {track.title}")
+        await self._send(chat_id, f"🎵 En cola: {item['label']}")
+
+    async def _download_album(self, chat_id: int, idx: int) -> None:
+        items = await self._selection(chat_id, "albums")
+        if items is None or idx < 0 or idx >= len(items):
+            await self._send(chat_id, "Selección caducada, vuelve a buscar.")
+            return
+        it = items[idx]
+        n = await self.core.enqueue_album(it["provider"], it["id"], origin=self.name)
+        if not n:
+            await self._send(chat_id, "No hay fuentes disponibles para ese álbum.")
+            return
+        await self._send(chat_id, f"💿 {n} pista(s) de «{it['label']}» en cola.")
 
     async def on_job_terminal(self, job: dict) -> None:
-        chat_id = self._job_chats.pop(job.get("id"), None)
-        if chat_id is None:
+        chat_id = job.get("origin_chat")
+        if not chat_id:
             return
         title = job.get("title") or "pista"
         if job.get("status") == "done":
-            await self._safe_send(chat_id, f"✅ Descargado: {title}")
+            await self._safe_send(int(chat_id), f"✅ Descargado: {title}")
         else:
-            await self._safe_send(chat_id, f"❌ Error: {title}\n{(job.get('error') or '')[:200]}")
+            await self._safe_send(
+                int(chat_id), f"❌ Error: {title}\n{(job.get('error') or '')[:200]}"
+            )

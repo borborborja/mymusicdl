@@ -42,6 +42,7 @@ _ADDED_COLUMNS: dict[str, dict[str, str]] = {
     "jobs": {
         "origin": "VARCHAR(16) DEFAULT 'web'",
         "library_confirmed": "BOOLEAN",
+        "origin_chat": "VARCHAR(128)",
     },
 }
 

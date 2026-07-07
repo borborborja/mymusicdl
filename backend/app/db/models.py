@@ -6,6 +6,7 @@ Five tables underpin every feature:
   tools          — tracked downloader CLIs: installed vs latest version + changelog
   settings       — key/value app config overrides
   credentials    — per-provider secrets; presence flips a paid provider to "enabled"
+  bot_selections — a chat's last search results, so "reply with N" survives a restart
 """
 
 from __future__ import annotations
@@ -67,6 +68,9 @@ class Job(Base):
     origin: Mapped[str] = mapped_column(
         String(16), default="web"
     )  # web|telegram|matrix (who queued it)
+    # Chat/room id of the bot that queued it, so terminal-status pings survive a restart
+    # (they no longer live in an in-memory dict on the adapter). Null for web/album-batch jobs.
+    origin_chat: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
@@ -92,6 +96,23 @@ class AppSetting(Base):
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class BotSelection(Base):
+    """Last search results a bot showed a chat, so "reply with N" survives a restart.
+
+    One row per (platform, chat_id); ``payload`` is a JSON blob of {mode, items} the adapter uses to
+    resolve a numeric pick back to a download.
+    """
+
+    __tablename__ = "bot_selections"
+
+    platform: Mapped[str] = mapped_column(String(16), primary_key=True)  # telegram|matrix
+    chat_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    payload: Mapped[str] = mapped_column(Text)  # JSON {mode: songs|albums, items: [...]}
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
