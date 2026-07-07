@@ -20,6 +20,11 @@ Image: `ghcr.io/borborborja/mymusicdl:latest`, built and pushed by GitHub Action
 (`.github/workflows/docker-image.yml`) on every push to `main`. **Watchtower** (label in
 `compose.yaml`) auto-updates the container when a new `:latest` is published.
 
+The image is **multi-arch** (`linux/amd64` + `linux/arm64`), so the same tag runs on an x86 box or
+an arm64 device (Raspberry Pi 4/5 64-bit, Apple-silicon dev, arm cloud). Docker pulls the matching
+variant automatically — nothing to configure. (The arm64 layer is built under QEMU emulation in CI,
+so pushes take a bit longer.)
+
 ## Configuration (`.env`)
 
 `compose.yaml` is generic; **every site-specific value comes from `.env`** (golden rule #6). Copy
