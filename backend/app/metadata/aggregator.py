@@ -4,6 +4,7 @@ Ties the catalog (Spotify → MusicBrainz) to the download providers: for every 
 qualities each enabled provider can deliver, plus the Navidrome library match (already-downloaded +
 at what quality, and whether a better tier is available).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -177,11 +178,18 @@ class SearchAggregator:
         limit: int = 20,
         providers_filter: set[str] | None = None,
         lossless_only: bool = False,
+        artist: str | None = None,
+        album: str | None = None,
+        year: str | None = None,
     ) -> SearchResponseDTO:
         md = self._active_metadata()
         kind = kind.lower()
+        if kind == "artist" and not query.strip():
+            raise ValueError("Empty search: provide an artist name")
+        if kind in ("song", "album") and not (query.strip() or artist or album):
+            raise ValueError("Empty search: provide a query, an artist or an album")
         if kind == "song":
-            tracks = await md.search_tracks(query, limit)
+            tracks = await md.search_tracks(query, limit, artist=artist, album=album, year=year)
             return SearchResponseDTO(
                 kind="song",
                 tracks=await self._decorate_many(
@@ -189,7 +197,7 @@ class SearchAggregator:
                 ),
             )
         if kind == "album":
-            albums = _dedup_albums(await md.search_albums(query, limit))
+            albums = _dedup_albums(await md.search_albums(query, limit, artist=artist, year=year))
             return SearchResponseDTO(
                 kind="album",
                 albums=[
@@ -210,7 +218,9 @@ class SearchAggregator:
             return SearchResponseDTO(
                 kind="artist",
                 artists=[
-                    ArtistResultDTO(id=a.id, name=a.name, provider=a.provider, cover_url=a.cover_url)
+                    ArtistResultDTO(
+                        id=a.id, name=a.name, provider=a.provider, cover_url=a.cover_url
+                    )
                     for a in artists
                 ],
             )

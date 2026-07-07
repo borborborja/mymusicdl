@@ -3,6 +3,7 @@
 This is what spotdl resolves against, so results map 1:1 to what spotdl can download. The track
 ``source_url`` is the Spotify URL (spotdl consumes it directly; yt-dlp ignores it and searches).
 """
+
 from __future__ import annotations
 
 import base64
@@ -19,6 +20,22 @@ log = get_logger(__name__)
 
 _TOKEN_URL = "https://accounts.spotify.com/api/token"
 _API = "https://api.spotify.com/v1"
+
+
+def _fielded(query: str, field: str, **filters: str | None) -> str:
+    """Compose a Spotify field-filtered query (``track:Creep artist:Radiohead``).
+
+    Spotify's search filters are unreliable with quoted values, so values go unquoted with any
+    ``:`` stripped. With no filters set the query passes through verbatim, which also preserves
+    hand-written advanced syntax typed by the user.
+    """
+    active = {k: v for k, v in filters.items() if v and v.strip()}
+    if not active:
+        return query
+    sanitize = lambda v: v.replace(":", " ").strip()  # noqa: E731
+    parts = [f"{field}:{sanitize(query)}"] if query.strip() else []
+    parts += [f"{k}:{sanitize(v)}" for k, v in active.items()]
+    return " ".join(parts)
 
 
 class SpotifyMetadata(MetadataProvider):
@@ -89,24 +106,41 @@ class SpotifyMetadata(MetadataProvider):
             ext_ids={"spotify": item["id"]} if item.get("id") else {},
         )
 
-    async def search_tracks(self, query: str, limit: int = 20) -> list[TrackRef]:
-        data = await self._get("/search", {"q": query, "type": "track", "limit": limit})
+    async def search_tracks(
+        self,
+        query: str,
+        limit: int = 20,
+        *,
+        artist: str | None = None,
+        album: str | None = None,
+        year: str | None = None,
+    ) -> list[TrackRef]:
+        q = _fielded(query, "track", artist=artist, album=album, year=year)
+        data = await self._get("/search", {"q": q, "type": "track", "limit": limit})
         return [self._track_from(i) for i in (data.get("tracks", {}).get("items") or [])]
 
-    async def search_albums(self, query: str, limit: int = 20) -> list[AlbumRef]:
-        data = await self._get("/search", {"q": query, "type": "album", "limit": limit})
+    async def search_albums(
+        self,
+        query: str,
+        limit: int = 20,
+        *,
+        artist: str | None = None,
+        year: str | None = None,
+    ) -> list[AlbumRef]:
+        q = _fielded(query, "album", artist=artist, year=year)
+        data = await self._get("/search", {"q": q, "type": "album", "limit": limit})
         out: list[AlbumRef] = []
         for a in data.get("albums", {}).get("items") or []:
             images = a.get("images") or []
             artists = a.get("artists") or []
-            year = (a.get("release_date") or "")[:4]
+            released = (a.get("release_date") or "")[:4]
             out.append(
                 AlbumRef(
                     id=a["id"],
                     title=a.get("name", ""),
                     artist=artists[0]["name"] if artists else "",
                     provider=self.name,
-                    year=int(year) if year.isdigit() else None,
+                    year=int(released) if released.isdigit() else None,
                     cover_url=images[0]["url"] if images else None,
                     total_tracks=a.get("total_tracks"),
                 )

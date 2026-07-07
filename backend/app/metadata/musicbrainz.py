@@ -3,6 +3,7 @@
 No audio URLs (MB is a metadata DB), so downloads fall back to search-by-name (spotdl/yt-dlp resolve
 "artist - title"). MB asks for a descriptive User-Agent and ~1 req/s; fine for interactive use.
 """
+
 from __future__ import annotations
 
 import httpx
@@ -29,6 +30,26 @@ def _caa_release_group(rg_id: str | None) -> str | None:
     return f"{_CAA}/release-group/{rg_id}/front-250" if rg_id else None
 
 
+def _lucene_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _lucene(query: str, field: str, **filters: str | None) -> str:
+    """Compose a fielded Lucene query (``recording:"Creep" AND artist:"Radiohead"``).
+
+    With no filters set the query passes through verbatim (free-text match as before). ``year``
+    maps to MB's ``firstreleasedate`` field.
+    """
+    active = {k: v.strip() for k, v in filters.items() if v and v.strip()}
+    if not active:
+        return query
+    parts = [f'{field}:"{_lucene_escape(query.strip())}"'] if query.strip() else []
+    for key, value in active.items():
+        mb_field = "firstreleasedate" if key == "year" else key
+        parts.append(f'{mb_field}:"{_lucene_escape(value)}"')
+    return " AND ".join(parts)
+
+
 class MusicBrainzMetadata(MetadataProvider):
     name = "musicbrainz"
 
@@ -48,8 +69,17 @@ class MusicBrainzMetadata(MetadataProvider):
         ac = obj.get("artist-credit") or []
         return ac[0]["name"] if ac else ""
 
-    async def search_tracks(self, query: str, limit: int = 20) -> list[TrackRef]:
-        data = await self._get("/recording", {"query": query, "limit": limit})
+    async def search_tracks(
+        self,
+        query: str,
+        limit: int = 20,
+        *,
+        artist: str | None = None,
+        album: str | None = None,
+        year: str | None = None,
+    ) -> list[TrackRef]:
+        q = _lucene(query, "recording", artist=artist, release=album, year=year)
+        data = await self._get("/recording", {"query": q, "limit": limit})
         out: list[TrackRef] = []
         for rec in data.get("recordings", []) or []:
             releases = rec.get("releases") or []
@@ -70,8 +100,16 @@ class MusicBrainzMetadata(MetadataProvider):
             )
         return out
 
-    async def search_albums(self, query: str, limit: int = 20) -> list[AlbumRef]:
-        data = await self._get("/release-group", {"query": query, "limit": limit})
+    async def search_albums(
+        self,
+        query: str,
+        limit: int = 20,
+        *,
+        artist: str | None = None,
+        year: str | None = None,
+    ) -> list[AlbumRef]:
+        q = _lucene(query, "releasegroup", artist=artist, year=year)
+        data = await self._get("/release-group", {"query": q, "limit": limit})
         out: list[AlbumRef] = []
         for rg in data.get("release-groups", []) or []:
             date = rg.get("first-release-date") or ""

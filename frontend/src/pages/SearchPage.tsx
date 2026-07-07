@@ -14,12 +14,29 @@ const KINDS: { value: Kind; label: string }[] = [
   { value: "artist", label: "Artistas" },
 ];
 
+const PLACEHOLDERS: Record<Kind, string> = {
+  song: "Canción o texto libre…",
+  album: "Álbum…",
+  artist: "Artista…",
+};
+
+interface Fields {
+  q: string;
+  kind: Kind;
+  artist: string;
+  album: string;
+  year: string;
+}
+
 export default function SearchPage() {
   // Search state lives in the URL (?q=…&kind=…) so navigating to an album and pressing back
   // restores the results instead of dropping the user on an empty search box.
   const [searchParams, setSearchParams] = useSearchParams();
   const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [kind, setKind] = useState<Kind>((searchParams.get("kind") as Kind) ?? "song");
+  const [artist, setArtist] = useState(searchParams.get("artist") ?? "");
+  const [album, setAlbum] = useState(searchParams.get("album") ?? "");
+  const [year, setYear] = useState(searchParams.get("year") ?? "");
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [metadata, setMetadata] = useState<string>("");
   const [selected, setSelected] = useState<string[]>(() => {
@@ -44,14 +61,32 @@ export default function SearchPage() {
 
   // Re-run the search captured in the URL when landing here (incl. browser "back" from an album).
   useEffect(() => {
-    const urlQ = searchParams.get("q");
-    if (urlQ && urlQ.trim() && !data) void runSearch(urlQ, (searchParams.get("kind") as Kind) ?? "song");
+    const urlQ = searchParams.get("q") ?? "";
+    const urlArtist = searchParams.get("artist") ?? "";
+    const urlAlbum = searchParams.get("album") ?? "";
+    if ((urlQ.trim() || urlArtist.trim() || urlAlbum.trim()) && !data)
+      void runSearch({
+        q: urlQ,
+        kind: (searchParams.get("kind") as Kind) ?? "song",
+        artist: urlArtist,
+        album: urlAlbum,
+        year: searchParams.get("year") ?? "",
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const runSearch = async (qv = q, kindv = kind) => {
-    if (!qv.trim()) return;
-    const params: Record<string, string> = { q: qv, kind: kindv };
+  const runSearch = async (overrides: Partial<Fields> = {}) => {
+    const f: Fields = { q, kind, artist, album, year, ...overrides };
+    // "artist" searches only take the main box; the fielded filters apply to songs/albums.
+    if (f.kind === "artist" && !f.q.trim()) return;
+    if (!f.q.trim() && !f.artist.trim() && !f.album.trim()) return;
+    const params: Record<string, string> = { kind: f.kind };
+    if (f.q.trim()) params.q = f.q;
+    if (f.kind !== "artist") {
+      if (f.artist.trim()) params.artist = f.artist;
+      if (f.kind === "song" && f.album.trim()) params.album = f.album;
+      if (f.year.trim()) params.year = f.year;
+    }
     if (selected.length) params.providers = selected.join(",");
     if (losslessOnly) params.lossless = "1";
     if (limit !== 20) params.limit = String(limit);
@@ -59,7 +94,16 @@ export default function SearchPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.search({ q: qv, kind: kindv, providers: selected, losslessOnly, limit });
+      const res = await api.search({
+        q: params.q ?? "",
+        kind: f.kind,
+        artist: params.artist,
+        album: params.album,
+        year: params.year,
+        providers: selected,
+        losslessOnly,
+        limit,
+      });
       setData(res);
     } catch (e) {
       setError((e as Error).message);
@@ -69,9 +113,10 @@ export default function SearchPage() {
   };
 
   const onArtistPick = (name: string) => {
-    setQ(name);
+    setQ("");
+    setArtist(name);
     setKind("album");
-    void runSearch(name, "album");
+    void runSearch({ q: "", artist: name, kind: "album" });
   };
 
   return (
@@ -86,7 +131,7 @@ export default function SearchPage() {
         <div className="flex gap-2">
           <input
             className="input min-w-0 flex-1"
-            placeholder="Artista, álbum o canción…"
+            placeholder={PLACEHOLDERS[kind]}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             autoFocus
@@ -95,6 +140,32 @@ export default function SearchPage() {
             Buscar
           </button>
         </div>
+
+        {kind !== "artist" && (
+          <div className="flex flex-wrap gap-2">
+            <input
+              className="input min-w-0 flex-1 basis-40"
+              placeholder="Artista (opcional)"
+              value={artist}
+              onChange={(e) => setArtist(e.target.value)}
+            />
+            {kind === "song" && (
+              <input
+                className="input min-w-0 flex-1 basis-40"
+                placeholder="Álbum (opcional)"
+                value={album}
+                onChange={(e) => setAlbum(e.target.value)}
+              />
+            )}
+            <input
+              className="input w-24 shrink-0"
+              placeholder="Año"
+              inputMode="numeric"
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
+            />
+          </div>
+        )}
 
         <div className="inline-flex rounded-lg border border-slate-700 bg-slate-900 p-0.5">
           {KINDS.map((k) => (

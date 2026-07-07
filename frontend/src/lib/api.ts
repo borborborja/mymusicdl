@@ -42,6 +42,9 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
 export interface SearchParams {
   q: string;
   kind: "song" | "album" | "artist";
+  artist?: string;
+  album?: string;
+  year?: string;
   providers?: string[];
   losslessOnly?: boolean;
   limit?: number;
@@ -50,8 +53,12 @@ export interface SearchParams {
 export const api = {
   health: () => req<Record<string, unknown>>("/health"),
 
-  search: ({ q, kind, providers, losslessOnly, limit }: SearchParams) => {
-    const p = new URLSearchParams({ q, kind });
+  search: ({ q, kind, artist, album, year, providers, losslessOnly, limit }: SearchParams) => {
+    const p = new URLSearchParams({ kind });
+    if (q.trim()) p.set("q", q);
+    if (artist?.trim()) p.set("artist", artist);
+    if (album?.trim()) p.set("album", album);
+    if (year?.trim()) p.set("year", year);
     if (providers?.length) p.set("providers", providers.join(","));
     if (losslessOnly) p.set("lossless_only", "true");
     if (limit) p.set("limit", String(limit));
