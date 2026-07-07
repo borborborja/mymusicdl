@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
+import { useConfirm } from "../components/ConfirmDialog";
 import ProgressBar from "../components/ProgressBar";
+import { useToast } from "../components/Toaster";
 import { api } from "../lib/api";
 import { formatDuration } from "../lib/util";
 import { removeFinished, removeJob, setJobs, useJobs } from "../store/jobs";
@@ -17,7 +19,8 @@ const STATUS_STYLE: Record<string, string> = {
 
 export default function QueuePage() {
   const jobs = useJobs();
-  const [msg, setMsg] = useState<string | null>(null);
+  const toast = useToast();
+  const confirm = useConfirm();
 
   useEffect(() => {
     api.listJobs().then(setJobs).catch(() => undefined);
@@ -26,11 +29,22 @@ export default function QueuePage() {
   const cancel = (id: string) => void api.cancelJob(id).catch(() => undefined);
   const retry = (id: string) => void api.retryJob(id).catch(() => undefined);
   const recheck = (id: string) => void api.recheckJob(id).catch(() => undefined);
-  const remove = (id: string) => {
+  const remove = async (id: string) => {
+    if (!(await confirm({ title: "¿Quitar esta descarga de la lista?", danger: true, confirmLabel: "Quitar" })))
+      return;
     removeJob(id);
     void api.deleteJob(id).catch(() => undefined);
   };
-  const clearFinished = () => {
+  const clearFinished = async () => {
+    if (
+      !(await confirm({
+        title: "¿Limpiar las descargas terminadas?",
+        body: "Se quitan de la lista las completadas, con error y canceladas.",
+        confirmLabel: "Limpiar",
+        danger: true,
+      }))
+    )
+      return;
     removeFinished();
     void api.clearJobs().catch(() => undefined);
   };
@@ -40,11 +54,11 @@ export default function QueuePage() {
       .forEach((j) => void api.recheckJob(j.id).catch(() => undefined));
   };
   const reindex = () => {
-    setMsg("Reindexando Navidrome…");
+    toast.show("Reindexando Navidrome…");
     api
       .rescan()
-      .then(() => setMsg("Reindexado de Navidrome solicitado."))
-      .catch((e) => setMsg((e as Error).message));
+      .then(() => toast.success("Reindexado de Navidrome solicitado."))
+      .catch((e) => toast.error((e as Error).message));
   };
 
   const hasFinished = jobs.some((j) => TERMINAL.includes(j.status));
@@ -67,11 +81,6 @@ export default function QueuePage() {
           </button>
         )}
       </div>
-      {msg && (
-        <div className="rounded-md border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm">
-          {msg}
-        </div>
-      )}
       {!jobs.length && <p className="text-slate-500">No hay descargas todavía.</p>}
       {jobs.map((j) => {
         const indeterminate = j.status === "running" && !j.progress_pct;

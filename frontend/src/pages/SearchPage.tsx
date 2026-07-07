@@ -145,6 +145,7 @@ export default function SearchPage() {
           <input
             className="input min-w-0 flex-1"
             placeholder={PLACEHOLDERS[kind]}
+            aria-label="Búsqueda principal"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             autoFocus
@@ -159,6 +160,7 @@ export default function SearchPage() {
             <input
               className="input min-w-0 flex-1 basis-40"
               placeholder="Artista (opcional)"
+              aria-label="Artista (opcional)"
               value={artist}
               onChange={(e) => setArtist(e.target.value)}
             />
@@ -166,6 +168,7 @@ export default function SearchPage() {
               <input
                 className="input min-w-0 flex-1 basis-40"
                 placeholder="Álbum (opcional)"
+                aria-label="Álbum (opcional)"
                 value={album}
                 onChange={(e) => setAlbum(e.target.value)}
               />
@@ -173,6 +176,7 @@ export default function SearchPage() {
             <input
               className="input w-24 shrink-0"
               placeholder="Año"
+              aria-label="Año"
               inputMode="numeric"
               value={year}
               onChange={(e) => setYear(e.target.value)}
