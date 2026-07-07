@@ -17,7 +17,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-full">
-      <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/80 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 py-3 sm:px-4">
           <div className="flex shrink-0 items-center gap-2 text-base font-semibold sm:text-lg">
             <span aria-hidden>🎵</span>

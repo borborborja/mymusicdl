@@ -361,7 +361,7 @@ export default function SettingsPage() {
                 </div>
 
                 {bot.error && (
-                  <p className="mt-2 break-words text-xs text-red-400">{bot.error}</p>
+                  <p className="mt-2 wrap-break-word text-xs text-red-400">{bot.error}</p>
                 )}
 
                 {fromEnv ? (

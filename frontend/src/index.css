@@ -1,40 +1,68 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-:root {
-  color-scheme: dark;
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-brand: #22c55e;
+  --color-brand-dark: #16a34a;
 }
 
-html,
-body,
-#root {
-  height: 100%;
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
 }
 
-body {
-  @apply bg-slate-950 text-slate-100 antialiased;
-}
-
-@layer components {
-  .btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium
+@utility btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium
       transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@utility btn-primary {
+  @apply btn bg-brand text-slate-950 hover:bg-brand-dark;
+}
+
+@utility btn-ghost {
+  @apply btn border border-slate-700 text-slate-200 hover:bg-slate-800;
+}
+
+@utility card {
+  @apply rounded-lg border border-slate-800 bg-slate-900/60 p-4;
+}
+
+@utility input {
+  @apply rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100
+      placeholder:text-slate-500 focus:border-brand focus:outline-hidden;
+}
+
+@utility chip {
+  @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+}
+
+@layer utilities {
+  :root {
+    color-scheme: dark;
   }
-  .btn-primary {
-    @apply btn bg-brand text-slate-950 hover:bg-brand-dark;
+
+  html,
+  body,
+  #root {
+    height: 100%;
   }
-  .btn-ghost {
-    @apply btn border border-slate-700 text-slate-200 hover:bg-slate-800;
-  }
-  .card {
-    @apply rounded-lg border border-slate-800 bg-slate-900/60 p-4;
-  }
-  .input {
-    @apply rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100
-      placeholder:text-slate-500 focus:border-brand focus:outline-none;
-  }
-  .chip {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+
+  body {
+    @apply bg-slate-950 text-slate-100 antialiased;
   }
 }

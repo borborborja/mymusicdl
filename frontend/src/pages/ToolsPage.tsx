@@ -93,7 +93,7 @@ export default function ToolsPage() {
             {t.changelog && (
               <details className="mt-2">
                 <summary className="cursor-pointer text-sm text-slate-400">Changelog</summary>
-                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-950 p-3 text-xs text-slate-300">
+                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-sm bg-slate-950 p-3 text-xs text-slate-300">
                   {t.changelog}
                 </pre>
               </details>
