@@ -34,6 +34,7 @@ async def record_download(
     track: TrackRef,
     result_path: str | None,
     quality: Quality,
+    measured_bitrate: int | None = None,
 ) -> None:
     fmt = (
         os.path.splitext(result_path)[1].lstrip(".").lower()
@@ -56,7 +57,10 @@ async def record_download(
     fields = dict(
         file_path=result_path or "",
         fmt=fmt,
-        bitrate_kbps=_bitrate_for(settings, quality),
+        # Prefer the bitrate ffprobe read from the file; fall back to the settings-inferred value.
+        bitrate_kbps=(
+            measured_bitrate if measured_bitrate is not None else _bitrate_for(settings, quality)
+        ),
         size_bytes=size,
         source_provider=job.provider or "",
         source_url=track.source_url,

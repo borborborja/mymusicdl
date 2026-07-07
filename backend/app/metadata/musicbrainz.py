@@ -6,6 +6,9 @@ No audio URLs (MB is a metadata DB), so downloads fall back to search-by-name (s
 
 from __future__ import annotations
 
+import asyncio
+import time
+
 import httpx
 
 from backend.app.logging import get_logger
@@ -16,6 +19,7 @@ log = get_logger(__name__)
 
 _BASE = "https://musicbrainz.org/ws/2"
 _UA = "mymusicdl/0.1 (https://github.com/; self-hosted family music tool)"
+_MIN_INTERVAL_S = 1.1  # MusicBrainz asks for ~1 request/second; stay just under it
 
 # Cover Art Archive — free, keyless artwork keyed by MusicBrainz MBIDs. Not every release has art,
 # so these URLs may 404; the frontend's <Artwork> falls back to a generated cover on image error.
@@ -59,8 +63,19 @@ class MusicBrainzMetadata(MetadataProvider):
         self._http = httpx.AsyncClient(
             timeout=12.0, headers={"User-Agent": _UA, "Accept": "application/json"}
         )
+        # Serialize requests and space them out to honour MB's ~1 req/s policy (single asyncio loop).
+        self._rate_lock = asyncio.Lock()
+        self._last_request = 0.0
+
+    async def _throttle(self) -> None:
+        async with self._rate_lock:
+            wait = _MIN_INTERVAL_S - (time.monotonic() - self._last_request)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last_request = time.monotonic()
 
     async def _get(self, path: str, params: dict) -> dict:
+        await self._throttle()
         params = {**params, "fmt": "json"}
         resp = await self._http.get(f"{_BASE}{path}", params=params)
         resp.raise_for_status()

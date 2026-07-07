@@ -16,6 +16,7 @@ from backend.app.config import Settings
 from backend.app.db.models import Job
 from backend.app.downloads.errors import humanize_error, is_transient
 from backend.app.downloads.paths import build_dest
+from backend.app.downloads.probe import duration_mismatch, ffprobe_audio
 from backend.app.downloads.progress import ProgressBroker
 from backend.app.downloads.queue import DownloadQueue
 from backend.app.downloads.runner import SubprocessError
@@ -302,6 +303,25 @@ class WorkerPool:
             # ── success ──
             job.result_path = _pick_new_audio(dest, before)
             job.status, job.progress_pct, job.stage = "done", 100.0, "done"
+
+            # Probe the real file: record its actual bitrate, and flag a gross duration mismatch
+            # (usually a wrong-source resolution) as a non-fatal warning on the job.
+            measured_bitrate: int | None = None
+            if job.result_path:
+                probe = await ffprobe_audio(job.result_path)
+                if probe:
+                    measured_bitrate = probe["bitrate_kbps"]
+                    if duration_mismatch(track.duration_s, probe["duration_s"]):
+                        job.error = (
+                            f"⚠️ Duración inesperada: {probe['duration_s']}s frente a "
+                            f"{track.duration_s}s esperados — revisa que sea la pista correcta."
+                        )
+                        log.warning(
+                            "job %s duration mismatch: got %ss, expected %ss",
+                            job_id,
+                            probe["duration_s"],
+                            track.duration_s,
+                        )
             await session.commit()
             await self._publish(job)
 
@@ -316,6 +336,7 @@ class WorkerPool:
                     track=track,
                     result_path=job.result_path,
                     quality=quality,
+                    measured_bitrate=measured_bitrate,
                 )
             except Exception:
                 log.exception("library bookkeeping failed for job %s", job_id)
