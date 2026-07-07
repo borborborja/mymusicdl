@@ -68,6 +68,12 @@ export const api = {
   album: (provider: string, id: string) =>
     req<AlbumDetail>(`/album/${encodeURIComponent(provider)}/${encodeURIComponent(id)}`),
 
+  preview: (t: { artist: string; title: string; source_url?: string | null }) => {
+    const p = new URLSearchParams({ artist: t.artist, title: t.title });
+    if (t.source_url) p.set("source_url", t.source_url);
+    return req<{ url: string }>(`/preview?${p.toString()}`);
+  },
+
   enqueue: (items: DownloadItemInput[]) =>
     req<Job[]>("/downloads", { method: "POST", body: JSON.stringify({ items }) }),
 

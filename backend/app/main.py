@@ -146,6 +146,7 @@ def create_app() -> FastAPI:
         routes_health,
         routes_jobs,
         routes_library,
+        routes_preview,
         routes_search,
         routes_settings,
         routes_tools,
@@ -154,6 +155,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_health.router, prefix="/api", tags=["health"])
     app.include_router(routes_search.router, prefix="/api", tags=["search"])
     app.include_router(routes_album.router, prefix="/api", tags=["album"])
+    app.include_router(routes_preview.router, prefix="/api", tags=["preview"])
     app.include_router(routes_downloads.router, prefix="/api", tags=["downloads"])
     app.include_router(routes_jobs.router, prefix="/api", tags=["jobs"])
     app.include_router(routes_library.router, prefix="/api", tags=["library"])
