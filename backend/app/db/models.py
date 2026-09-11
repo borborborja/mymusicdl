@@ -63,6 +63,13 @@ class Job(Base):
     result_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     # None = not checked yet; True/False = confirmed present / not found in Navidrome after rescan.
     library_confirmed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    library_status: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    library_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    library_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    library_prepared: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    library_next_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     batch_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     title: Mapped[str | None] = mapped_column(String(512), nullable=True)  # human label for the UI
     origin: Mapped[str] = mapped_column(
@@ -130,3 +137,58 @@ class Credential(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+class CatalogTrack(Base):
+    """Read-only projection of a Navidrome file; never owns or moves its audio."""
+
+    __tablename__ = "catalog_tracks"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    server_key: Mapped[str] = mapped_column(String(64), index=True)
+    navidrome_id: Mapped[str] = mapped_column(String(128), index=True)
+    title: Mapped[str] = mapped_column(String(512))
+    artist: Mapped[str] = mapped_column(String(512))
+    album: Mapped[str] = mapped_column(String(512), default="")
+    search_text: Mapped[str] = mapped_column(Text)
+    recording_mbid: Mapped[str | None] = mapped_column(String(64), index=True)
+    available: Mapped[bool] = mapped_column(Boolean, default=True)
+    payload: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CatalogState(Base):
+    __tablename__ = "catalog_state"
+    generation: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    server_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class FamilyTrack(Base):
+    """Shared preferences are independent of download retention and catalog availability."""
+
+    __tablename__ = "family_tracks"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    payload: Mapped[str] = mapped_column(Text)
+    saved: Mapped[bool] = mapped_column(Boolean, default=False)
+    favorite: Mapped[bool] = mapped_column(Boolean, default=False)
+    dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
+    job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class FamilyArtist(Base):
+    __tablename__ = "family_artists"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(512))
+
+
+class DiscoveryCache(Base):
+    __tablename__ = "discovery_cache"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    seed_key: Mapped[str] = mapped_column(Text, default="")
+    payload: Mapped[str] = mapped_column(Text, default="[]")
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)

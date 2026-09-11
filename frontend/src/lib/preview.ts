@@ -11,6 +11,7 @@ interface PreviewState {
 let state: PreviewState = { key: null, status: "idle" };
 const listeners = new Set<() => void>();
 let audio: HTMLAudioElement | null = null;
+let requestId = 0;
 
 function set(next: PreviewState) {
   state = next;
@@ -26,8 +27,16 @@ function ensureAudio(): HTMLAudioElement {
   return audio;
 }
 
+export function stopPreview(): void {
+  ++requestId;
+  audio?.pause();
+  set({ key: null, status: "idle" });
+}
+
 /** Toggle preview for `key`: stops if it's the one playing, else resolves the URL and plays it. */
 export async function togglePreview(key: string, resolveUrl: () => Promise<string>): Promise<void> {
+  document.querySelectorAll("audio").forEach((element) => element.pause());
+  const currentRequest = ++requestId;
   const a = ensureAudio();
   if (state.key === key && state.status !== "idle") {
     a.pause();
@@ -38,12 +47,13 @@ export async function togglePreview(key: string, resolveUrl: () => Promise<strin
   set({ key, status: "loading" });
   try {
     const url = await resolveUrl();
-    if (state.key !== key) return; // superseded by another click
+    if (currentRequest !== requestId) return;
     a.src = url;
     await a.play();
-    if (state.key === key) set({ key, status: "playing" });
+    if (currentRequest === requestId) set({ key, status: "playing" });
   } catch (e) {
-    if (state.key === key) set({ key: null, status: "idle" });
+    if (currentRequest !== requestId) return;
+    set({ key: null, status: "idle" });
     throw e;
   }
 }

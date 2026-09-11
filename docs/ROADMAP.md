@@ -1,9 +1,15 @@
 # Roadmap & planned work
 
 Future goals to **keep in mind while writing code now**, so today's changes don't paint tomorrow into
-a corner. Status reflects the current scaffold. Update this file as items land.
+a corner. Update this file as items land.
 
 ## Current status
+
+- ✅ First discovery delivery: full Navidrome catalog with atomic background indexing, local
+  search, artist-based ListenBrainz suggestions, shared family seeds/favorites/saved/dismissed
+  tracks, explicit queue action and protected original-file playback. Implemented and verified
+  locally; production delivery and real source downloads remain release checks. See
+  [DISCOVERY](DISCOVERY.md) for evidence and limitations.
 
 - ✅ End-to-end **free** download path (`spotdl` + `yt-dlp`): search → pick → queue → live progress →
   tagged file in `/music` → Navidrome rescan → "already in library" badge.
@@ -15,6 +21,11 @@ a corner. Status reflects the current scaffold. Update this file as items land.
 - ⏳ Paid lossless sources are **scaffolded but disabled** (no credentials).
 
 ## Planned / known future work
+
+The later product-plan deliveries remain future work: collections and export, explicit management
+of recording/file versions, and an optional AudioMuse integration. This release preserves recording
+identities in discovery and concrete file identities in the catalog; it does not replace the existing
+download file naming or library-item uniqueness model with a complete version manager.
 
 Keep these in view so present code stays compatible:
 

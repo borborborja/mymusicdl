@@ -54,6 +54,8 @@ class NavidromeClient:
         if body.get("status") == "failed":
             err = body.get("error", {})
             raise NavidromeError(err.get("message", "Subsonic request failed"))
+        if body.get("status") != "ok":
+            raise NavidromeError("Invalid Subsonic response")
         return body
 
     # ── endpoints ──
@@ -71,6 +73,7 @@ class NavidromeClient:
         artist_count: int = 0,
         album_count: int = 0,
         song_count: int = 20,
+        song_offset: int = 0,
     ) -> dict:
         body = await self._get(
             "search3",
@@ -79,6 +82,7 @@ class NavidromeClient:
                 "artistCount": artist_count,
                 "albumCount": album_count,
                 "songCount": song_count,
+                "songOffset": song_offset,
             },
         )
         return body.get("searchResult3", {})

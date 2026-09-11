@@ -43,6 +43,10 @@ include = ["backend*"]
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint]
+# Keep the project's lint gate stable when installing newer Ruff versions.
+select = ["E4", "E7", "E9", "F", "I"]
+
 [tool.black]
 line-length = 100
 target-version = ["py312"]

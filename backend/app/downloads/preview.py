@@ -10,8 +10,10 @@ from __future__ import annotations
 import asyncio
 
 from backend.app.config import Settings
+from backend.app.downloads.runner import terminate_process
 from backend.app.logging import get_logger
 from backend.app.metadata.cache import TTLCache
+from backend.app.security import youtube_track_url
 
 log = get_logger(__name__)
 
@@ -21,8 +23,9 @@ _cache = TTLCache(ttl_s=120)
 
 def _target(artist: str, title: str, source_url: str | None) -> str:
     url = source_url or ""
-    if any(d in url for d in ("youtube.com", "youtu.be")):
-        return url
+    video = youtube_track_url(url)
+    if video:
+        return video
     return f"ytsearch1:{artist} {title}".strip()
 
 
@@ -46,16 +49,21 @@ async def resolve_stream_url(
         "--no-warnings",
         target,
     ]
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=True,
         )
         out, _ = await asyncio.wait_for(proc.communicate(), timeout=25)
     except (OSError, asyncio.TimeoutError) as exc:
         log.warning("preview resolve failed for %r: %s", target, exc)
         return None
+    finally:
+        if proc is not None:
+            await terminate_process(proc)
     url = ""
     if proc.returncode == 0 and out:
         # yt-dlp may print video+audio URLs on separate lines; take the first.

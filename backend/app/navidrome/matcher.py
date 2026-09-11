@@ -13,6 +13,10 @@ from backend.app.providers.base import Quality, QualityOption
 _LOSSLESS_SUFFIXES = {"flac", "alac", "wav", "aiff", "ape", "wv"}
 
 
+class LibraryUnavailable(RuntimeError):
+    """A lookup could not establish whether the recording is present."""
+
+
 def norm(s: str | None) -> str:
     """Lowercase, strip accents/punctuation/feat-clauses, collapse whitespace."""
     s = unicodedata.normalize("NFKD", s or "")
@@ -59,6 +63,7 @@ async def library_quality(
     album: str | None = None,
     duration_s: int | None = None,
     isrc: str | None = None,
+    raise_on_unavailable: bool = False,
 ) -> dict | None:
     """Return {navidrome_id, suffix, bitrate_kbps, quality} for a library match, else None.
 
@@ -69,21 +74,27 @@ async def library_quality(
     normalized-title + artist + duration match.
     """
     if navidrome is None:
+        if raise_on_unavailable:
+            raise LibraryUnavailable("Navidrome is not configured")
         return None
     try:
         result = await navidrome.search3(f"{artist} {title}", song_count=25)
-    except Exception:
+    except Exception as exc:
+        if raise_on_unavailable:
+            raise LibraryUnavailable("Navidrome lookup failed") from exc
         return None
 
     songs = result.get("song", []) or []
     want_isrc = (isrc or "").strip().upper() or None
     na, nt = norm(artist), norm(title)
+    exact_matches = []
+    matches = []
     for song in songs:
         cand_isrcs = _song_isrcs(song)
         if want_isrc and cand_isrcs:
             # Both sides have an ISRC — trust it exclusively for this candidate.
             if want_isrc in cand_isrcs:
-                return _match_result(song)
+                exact_matches.append(song)
             continue
         if norm(song.get("title", "")) != nt:
             continue
@@ -92,5 +103,12 @@ async def library_quality(
         if duration_s and song.get("duration"):
             if abs(int(song["duration"]) - duration_s) > 12:
                 continue
-        return _match_result(song)
-    return None
+        matches.append(song)
+    candidates = exact_matches or matches
+    if not candidates:
+        return None
+    best = max(
+        candidates,
+        key=lambda song: (int(quality_from_song(song).quality), song.get("bitRate") or 0),
+    )
+    return _match_result(best)

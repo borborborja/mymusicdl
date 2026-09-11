@@ -105,6 +105,7 @@ class SpotifyMetadata(MetadataProvider):
             title=item.get("name", ""),
             artist=_credit(artists),
             album=album.get("name"),
+            album_artist=_credit(album.get("artists") or []) or None,
             source_url=(item.get("external_urls") or {}).get("spotify"),
             isrc=(item.get("external_ids") or {}).get("isrc"),
             duration_s=(item.get("duration_ms") or 0) // 1000 or None,
@@ -182,10 +183,17 @@ class SpotifyMetadata(MetadataProvider):
             cover_url=images[0]["url"] if images else None,
             total_tracks=album.get("total_tracks"),
         )
-        tracks = [
-            self._track_from(item, album=album)
-            for item in (album.get("tracks", {}).get("items") or [])
-        ]
+        page = album.get("tracks") or {}
+        items = list(page.get("items") or [])
+        while page.get("next"):
+            page = await self._get(
+                f"/albums/{album_id}/tracks", {"offset": len(items), "limit": 50}
+            )
+            more = page.get("items") or []
+            if not more:
+                break
+            items.extend(more)
+        tracks = [self._track_from(item, album=album) for item in items]
         return ref, tracks
 
     async def aclose(self) -> None:

@@ -12,7 +12,6 @@ import asyncio
 import contextlib
 import json
 
-
 from backend.app.bots.base import BotAdapter
 from backend.app.bots.core import BotCore
 from backend.app.bots.matrix import MatrixBot
@@ -165,6 +164,8 @@ class BotManager:
                 ev = await q.get()
                 if ev.get("type") != "job":
                     continue
+                if ev.get("library_sync"):
+                    continue  # synchronization updates are not new download completions
                 job = ev.get("job") or {}
                 if job.get("kind") != "download" or job.get("status") not in ("done", "error"):
                     continue

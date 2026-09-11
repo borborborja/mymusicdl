@@ -1,5 +1,15 @@
 # Architecture
 
+## Family discovery and complete catalog
+
+`library/catalog.py` maintains an atomic, account-scoped SQLite projection of Navidrome with
+paginated sync and generation tokens. `library/discovery.py` maintains the ListenBrainz cache and
+rate-limited background refresh. `library/family.py` joins durable shared preferences with catalog,
+local-file and job availability. `api/routes_collection.py` exposes these services and proxies
+original Navidrome audio using short-lived tickets. Confirmed downloads feed the catalog through
+the library-sync callback; collection events refresh clients over the existing SSE connection.
+See [DISCOVERY](DISCOVERY.md) for identity rules, configuration and verification.
+
 How the pieces fit, how a download flows end to end, and the invariants that keep it correct.
 Read this before changing anything in `downloads/`, `providers/`, `db/`, or `main.py`.
 
@@ -41,7 +51,7 @@ async-context-manager does the real wiring, **in this order**:
 5. `queue.rehydrate(session)` — re-enqueue jobs left `queued`/`running` from a previous run.
 6. Start `worker`, `updater`, `bots`.
 
-On shutdown it stops bots → worker → updater and closes the Navidrome client.
+On shutdown it stops bots → worker → updater and closes the metadata and Navidrome clients.
 
 The built SPA is served from `/static` (present only in the Docker image). A catch-all route returns
 `index.html` for client-side routing; anything under `/api` that misses returns a real 404.
@@ -82,13 +92,15 @@ HTTP POST /api/downloads        bot "download this"
                    ▼
    downloads/worker.py :: WorkerPool._process(job_id)   (one of N coroutines)
      • re-load job; skip if not still `queued`
-     • snapshot dest dir contents (to detect the new file later)
+     • lock the destination directory; snapshot its contents for providers with their own naming
      • status→running; provider.download(track, quality, dest_dir, job_id) async-iterates:
          each ProgressEvent → update job.stage/pct (throttled) → broker.publish → SSE
-       (the consume() runs as a child task so a single job can be cancelled)
-     • on success: _pick_new_audio() picks the largest new audio file → result_path
-                   status→done, pct=100
-                   library/tracker.record_download(...) → writes library_items + Navidrome startScan
+       (the entire job, including retry waits, runs as a cancellable child task)
+     • on success: identify the expected nonempty output (or a single unambiguous new audio file) → result_path
+                   downloads/tagging.tag_audio(...) → canonical tags without audio re-encoding
+                   library/tracker.record_download(...) → writes library_items
+                   status→done, pct=100; Navidrome delivery→pending
+                   library/sync.LibrarySync → persisted, batched scans + exact file confirmation
      • on SubprocessError/Exception: status→error with the output tail
      • on cancel: status→canceled and the subprocess *group* is SIGTERM/SIGKILLed (runner.py)
      • on pool shutdown mid-job: job left `queued` so the next boot resumes it
@@ -138,3 +150,8 @@ them. Adapters are raw `httpx` (Telegram long-poll `getUpdates` + inline buttons
 non-E2E, auto-joins invites). Access is an **allowlist** (`_parse_int_csv` for Telegram numeric IDs,
 `_parse_str_csv` for Matrix `@user:server`); empty allowlist denies all. Both queue downloads through
 the same `enqueue_tracks()` as the web, tagging `origin` accordingly.
+
+## Saved-file playback and delivery reconciliation
+
+See [PLAYBACK_AND_NAVIDROME.md](PLAYBACK_AND_NAVIDROME.md) for the saved-file player, scoped
+streaming URLs, durable scan retries, schema additions and operational diagnostics.

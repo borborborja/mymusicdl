@@ -43,6 +43,8 @@ def validate_layout(template: str) -> None:
         )
     if "{title}" not in template:
         raise ValueError("La plantilla debe incluir {title} para el nombre del archivo")
+    if "{title}" not in template.split("/")[-1]:
+        raise ValueError("El nombre del archivo debe incluir {title}")
 
 
 def _sanitize(component: str, fallback: str) -> str:
@@ -108,4 +110,8 @@ def build_dest(
     # Containment guard: if the join somehow escaped the music root, fall back to the root itself.
     if os.path.commonpath([base_abs, dest_dir]) != base_abs:
         dest_dir = base_abs
+    if os.path.commonpath(
+        [os.path.realpath(base_abs), os.path.realpath(dest_dir)]
+    ) != os.path.realpath(base_abs):
+        raise ValueError("El destino contiene un enlace fuera de la biblioteca")
     return dest_dir, filename

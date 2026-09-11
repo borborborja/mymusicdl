@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import LocalSearch from "../components/LocalSearch";
 import SourceFilter from "../components/SourceFilter";
 import { api } from "../lib/api";
 import type { ProviderInfo, SearchResponse } from "../lib/types";
@@ -49,6 +50,7 @@ export default function SearchPage() {
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   useEffect(() => {
     api
@@ -93,6 +95,7 @@ export default function SearchPage() {
     if (limit !== 20) params.limit = String(limit);
     if (sort !== "relevance") params.sort = sort;
     setSearchParams(params);
+    const currentRequest = ++requestId.current;
     setLoading(true);
     setError(null);
     try {
@@ -106,11 +109,11 @@ export default function SearchPage() {
         losslessOnly,
         limit,
       });
-      setData(res);
+      if (currentRequest === requestId.current) setData(res);
     } catch (e) {
-      setError((e as Error).message);
+      if (currentRequest === requestId.current) setError((e as Error).message);
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) setLoading(false);
     }
   };
 
@@ -230,7 +233,7 @@ export default function SearchPage() {
               value={limit}
               onChange={(e) => setLimit(Number(e.target.value))}
             >
-              {[20, 40, 60, 100].map((n) => (
+              {[20, 40].map((n) => (
                 <option key={n} value={n}>
                   {n}
                 </option>
@@ -248,6 +251,8 @@ export default function SearchPage() {
         )}
       </form>
 
+      {(searchParams.get("q") || searchParams.get("artist") || searchParams.get("album")) && <LocalSearch query={[searchParams.get("q"), searchParams.get("artist"), searchParams.get("album")].filter(Boolean).join(" ")} />}
+      <h2 className="mt-5 font-semibold">En el catálogo externo</h2>
       <ResultsPage
         data={sortedData}
         loading={loading}

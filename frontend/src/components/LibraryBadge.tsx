@@ -1,6 +1,9 @@
 import type { LibraryMatch } from "../lib/types";
 
 export default function LibraryBadge({ library }: { library: LibraryMatch }) {
+  if (library.availability_known === false) {
+    return <span className="chip border border-amber-700 text-amber-300">Biblioteca sin verificar</span>;
+  }
   if (!library.in_library) {
     return (
       <span className="chip border border-slate-700 bg-slate-800 text-slate-400">No descargada</span>

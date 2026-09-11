@@ -15,7 +15,7 @@ from backend.app.metadata.base import MetadataProvider
 from backend.app.metadata.cache import TTLCache
 from backend.app.metadata.musicbrainz import MusicBrainzMetadata
 from backend.app.metadata.spotify import SpotifyMetadata
-from backend.app.navidrome.matcher import library_quality, norm
+from backend.app.navidrome.matcher import LibraryUnavailable, library_quality, norm
 from backend.app.providers.base import Quality, TrackRef
 from backend.app.providers.registry import ProviderRegistry
 from backend.app.schemas.search import (
@@ -36,14 +36,12 @@ _NO_MATCH = object()
 
 
 # ── result de-duplication ──
-# Metadata sources (notably the keyless MusicBrainz fallback) return the same artist many times —
-# distinct MBIDs / disambiguations that all share a name. Collapse by a stable key, keeping the
-# first hit (sources return by relevance), so the UI doesn't show a wall of repeats.
+# Deduplicate repeated identities, preserving homonymous artists and distinct recordings.
 def _dedup_artists(artists):
     seen: set[str] = set()
     out = []
     for a in artists:
-        key = norm(a.name)
+        key = f"{a.provider}:{a.id}"
         if not key or key in seen:
             continue
         seen.add(key)
@@ -67,7 +65,12 @@ def _dedup_tracks(tracks):
     seen: set[str] = set()
     out = []
     for t in tracks:
-        key = (t.isrc or "").strip().lower() or f"{norm(t.title)}|{norm(t.artist)}"
+        key = (
+            t.ext_ids.get("mbid")
+            or t.ext_ids.get("spotify")
+            or (t.isrc or "").strip().lower()
+            or f"{norm(t.title)}|{norm(t.artist)}|{t.album}|{t.duration_s}|{t.source_url}"
+        )
         if not key or key in seen:
             continue
         seen.add(key)
@@ -105,6 +108,12 @@ class SearchAggregator:
     def metadata_name(self) -> str:
         return self._active_metadata().name
 
+    async def aclose(self) -> None:
+        await asyncio.gather(self._spotify.aclose(), self._musicbrainz.aclose())
+
+    def invalidate_library(self) -> None:
+        self._library_cache.clear()
+
     def set_spotify_credentials(self, creds: dict | None) -> None:
         """Apply/clear Spotify catalog credentials at runtime (no restart needed)."""
         self._spotify.set_credentials(creds)
@@ -128,6 +137,7 @@ class SearchAggregator:
             album=track.album,
             duration_s=track.duration_s,
             isrc=track.isrc,
+            raise_on_unavailable=True,
         )
         self._library_cache.set(key, match if match is not None else _NO_MATCH)
         return match
@@ -163,7 +173,11 @@ class SearchAggregator:
             return None
 
         library = LibraryMatchDTO()
-        match = await self._library_match(track)
+        try:
+            match = await self._library_match(track)
+        except LibraryUnavailable:
+            match = None
+            library.availability_known = False
         if match:
             qdto = QualityOptionDTO(**match["quality"].to_dict())
             library = LibraryMatchDTO(
@@ -182,6 +196,7 @@ class SearchAggregator:
             duration_s=track.duration_s,
             cover_url=track.cover_url,
             ext_ids=track.ext_ids,
+            album_artist=track.album_artist,
             providers=provider_dtos,
             library=library,
             best_tier=best_tier,

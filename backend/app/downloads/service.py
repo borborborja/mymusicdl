@@ -18,6 +18,7 @@ from backend.app.config import Settings
 from backend.app.db.models import Job
 from backend.app.downloads.queue import DownloadQueue
 from backend.app.navidrome.matcher import norm
+from backend.app.providers.base import TrackRef
 from backend.app.providers.registry import ProviderRegistry
 
 
@@ -38,11 +39,16 @@ class EnqueueItem:
     @property
     def dedup_key(self) -> tuple:
         """Identity used to skip a track already queued/running for the same provider."""
+        ext_ids = self.track.get("ext_ids") or {}
+        recording = ext_ids.get("mbid") or ext_ids.get("spotify")
+        if recording:
+            return (self.provider, self.quality, "recording", recording)
         isrc = (self.track.get("isrc") or "").strip().upper()
         if isrc:
-            return (self.provider, "isrc", isrc)
+            return (self.provider, self.quality, "isrc", isrc)
         return (
             self.provider,
+            self.quality,
             norm(self.track.get("artist")),
             norm(self.track.get("title")),
             norm(self.track.get("album") or ""),
@@ -66,7 +72,11 @@ def _job_dedup_key(job: Job) -> tuple | None:
         track = json.loads(job.track_json or "{}")
     except (ValueError, TypeError):
         return None
-    return EnqueueItem(provider=job.provider or "", quality=0, track=track).dedup_key
+    if not isinstance(track, dict):
+        return None
+    return EnqueueItem(
+        provider=job.provider or "", quality=job.requested_quality or 0, track=track
+    ).dedup_key
 
 
 async def enqueue_tracks(
@@ -78,6 +88,22 @@ async def enqueue_tracks(
     *,
     origin: str = "web",
     origin_chat: str | None = None,
+) -> EnqueueResult:
+    async with queue.enqueue_lock:
+        return await _enqueue_tracks(
+            session, queue, registry, settings, items, origin=origin, origin_chat=origin_chat
+        )
+
+
+async def _enqueue_tracks(
+    session: AsyncSession,
+    queue: DownloadQueue,
+    registry: ProviderRegistry,
+    settings: Settings,
+    items: list[EnqueueItem],
+    *,
+    origin: str,
+    origin_chat: str | None,
 ) -> EnqueueResult:
     """Validate providers, persist one queued ``Job`` per item, and push them onto the queue.
 
@@ -91,11 +117,22 @@ async def enqueue_tracks(
         raise EnqueueError("No items to download")
 
     for item in items:
+        if item.quality not in range(5):
+            raise EnqueueError("Quality must be between 0 and 4")
         provider = registry.get(item.provider)
         if provider is None:
             raise EnqueueError(f"Unknown provider '{item.provider}'")
         if not provider.enabled:
             raise EnqueueError(f"Provider '{item.provider}' is not enabled (missing credentials)")
+        try:
+            track = TrackRef.from_dict({**item.track, "provider_id": item.provider})
+            qualities = await provider.get_qualities(track)
+        except (TypeError, ValueError) as exc:
+            raise EnqueueError(f"Invalid track: {exc}") from exc
+        if item.quality not in {int(option.quality) for option in qualities}:
+            raise EnqueueError(
+                f"Provider '{item.provider}' does not support quality {item.quality}"
+            )
 
     # Keys already in flight, so a re-submit of the same track doesn't spawn a second download.
     active = await session.execute(
@@ -120,7 +157,7 @@ async def enqueue_tracks(
     batch_id = str(uuid4()) if len(to_queue) > 1 else None
     for item in to_queue:
         track = dict(item.track)
-        track.setdefault("provider_id", item.provider)
+        track["provider_id"] = item.provider
         job = Job(
             id=str(uuid4()),
             kind="download",

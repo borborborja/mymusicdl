@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 
+from backend.app.downloads.runner import terminate_process
 from backend.app.logging import get_logger
 
 log = get_logger(__name__)
@@ -18,6 +19,7 @@ log = get_logger(__name__)
 
 async def ffprobe_audio(path: str) -> dict | None:
     """Return {'duration_s': int|None, 'bitrate_kbps': int|None} for ``path``, or None on failure."""
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             "ffprobe",
@@ -30,11 +32,15 @@ async def ffprobe_audio(path: str) -> dict | None:
             path,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=True,
         )
         out, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
     except (OSError, asyncio.TimeoutError) as exc:
         log.warning("ffprobe failed for %s: %s", path, exc)
         return None
+    finally:
+        if proc is not None:
+            await terminate_process(proc)
     if proc.returncode != 0:
         return None
     try:
@@ -43,10 +49,13 @@ async def ffprobe_audio(path: str) -> dict | None:
         return None
     duration = fmt.get("duration")
     bit_rate = fmt.get("bit_rate")
-    return {
-        "duration_s": round(float(duration)) if duration else None,
-        "bitrate_kbps": round(int(bit_rate) / 1000) if bit_rate else None,
-    }
+    try:
+        return {
+            "duration_s": round(float(duration)) if duration and duration != "N/A" else None,
+            "bitrate_kbps": round(int(bit_rate) / 1000) if bit_rate and bit_rate != "N/A" else None,
+        }
+    except (ValueError, TypeError, OverflowError):
+        return None
 
 
 def duration_mismatch(expected_s: int | None, actual_s: int | None) -> bool:

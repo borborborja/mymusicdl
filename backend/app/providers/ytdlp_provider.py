@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator
 
 from backend.app.downloads.runner import stream_subprocess
 from backend.app.providers.base import ProgressEvent, Provider, Quality, QualityOption, TrackRef
+from backend.app.security import youtube_track_url
 
 # Rendered by --progress-template "download:DLP|<pct>|<speed>|<eta>"
 _PCT_RE = re.compile(r"([\d.]+)%")
@@ -65,8 +66,7 @@ class YtdlpProvider(Provider):
     ) -> AsyncIterator[ProgressEvent]:
         # Only follow a *YouTube* URL; a Spotify/MusicBrainz URL would break yt-dlp, so search instead.
         url = track.source_url or ""
-        is_youtube = any(d in url for d in ("youtube.com", "youtu.be"))
-        target = url if is_youtube else f"ytsearch1:{track.artist} {track.title}"
+        target = youtube_track_url(url) or f"ytsearch1:{track.artist} {track.title}"
         name_tpl = f"{filename}.%(ext)s" if filename else "%(artist)s - %(title)s.%(ext)s"
         output_tpl = os.path.join(dest_dir, name_tpl)
         cmd = [

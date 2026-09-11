@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import DownloadedAudio from "../components/DownloadedAudio";
 import { useToast } from "../components/Toaster";
 import { api } from "../lib/api";
 import type { LibraryItem } from "../lib/types";
@@ -128,7 +129,8 @@ export default function LibraryPage() {
       {shown && shown.length > 0 && (
         <div className="card divide-y divide-slate-800 p-0">
           {shown.map((it) => (
-            <div key={it.id} className="flex items-center justify-between gap-3 px-4 py-2">
+            <div key={it.id} className="px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate font-medium">{it.title}</div>
                 <div className="truncate text-sm text-slate-400">
@@ -156,6 +158,8 @@ export default function LibraryPage() {
                   {busy === it.id ? "…" : "↓ Re-descargar"}
                 </button>
               </div>
+              </div>
+              <DownloadedAudio itemId={it.id} title={`${it.artist} — ${it.title}`} />
             </div>
           ))}
         </div>

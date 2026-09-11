@@ -14,6 +14,8 @@ function rebuild() {
 }
 
 export function upsertJob(job: Job) {
+  const previous = jobs.get(job.id);
+  if (previous?.updated_at && job.updated_at && previous.updated_at > job.updated_at) return;
   jobs.set(job.id, { ...jobs.get(job.id), ...job });
   rebuild();
 }

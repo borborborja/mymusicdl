@@ -52,6 +52,7 @@ class TrackRef:
     duration_s: int | None = None
     cover_url: str | None = None
     ext_ids: dict[str, str] = field(default_factory=dict)
+    album_artist: str | None = None
 
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)

@@ -22,6 +22,31 @@ log = get_logger(__name__)
 ParseFn = Callable[[str], ProgressEvent | None]
 
 
+async def terminate_process(proc: asyncio.subprocess.Process) -> None:
+    """Terminate and reap a subprocess started in its own process group."""
+    if proc.returncode is not None:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=5)
+        except TimeoutError:
+            pass
+        # Descendants can outlive the group leader or ignore SIGTERM.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    except ProcessLookupError:
+        pass
+    finally:
+        await proc.wait()
+
+
 class SubprocessError(RuntimeError):
     def __init__(self, returncode: int, output: str) -> None:
         self.returncode = returncode
@@ -51,7 +76,8 @@ async def stream_subprocess(
 
     Raises SubprocessError on a non-zero exit (with the tail of the output for diagnostics).
     """
-    log.info("[job %s] exec: %s", job_id, " ".join(cmd))
+    # Arguments can contain Spotify secrets, tokens, or signed URLs.
+    log.info("[job %s] exec: %s", job_id, os.path.basename(cmd[0]))
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -88,17 +114,11 @@ async def stream_subprocess(
             event = parse(line)
             if event is not None:
                 yield event
-        rc = await proc.wait()
+        try:
+            rc = await asyncio.wait_for(proc.wait(), timeout=idle_timeout)
+        except TimeoutError:
+            raise SubprocessError(-1, "Sin salida — descarga colgada tras cerrar stdout") from None
         if rc != 0:
             raise SubprocessError(rc, "\n".join(tail))
     finally:
-        if proc.returncode is None:
-            # Cancelled or generator closed early — tear down the whole process group.
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                try:
-                    await asyncio.wait_for(proc.wait(), timeout=5)
-                except asyncio.TimeoutError:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        await terminate_process(proc)

@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import json
 import os
+from weakref import WeakValueDictionary
 
 from backend.app.config import Settings
 from backend.app.db.models import Job
@@ -20,8 +21,9 @@ from backend.app.downloads.probe import duration_mismatch, ffprobe_audio
 from backend.app.downloads.progress import ProgressBroker
 from backend.app.downloads.queue import DownloadQueue
 from backend.app.downloads.runner import SubprocessError
+from backend.app.downloads.tagging import tag_audio
+from backend.app.library.sync import LibrarySync
 from backend.app.logging import get_logger
-from backend.app.navidrome.matcher import library_quality
 from backend.app.providers.base import Quality, TrackRef
 from backend.app.providers.registry import ProviderRegistry
 from backend.app.schemas.jobs import JobDTO
@@ -42,17 +44,15 @@ def _audio_files(dest: str) -> set[str]:
 
 
 def _pick_new_audio(dest: str, before: set[str]) -> str | None:
-    """Return the path of the largest newly-created audio file under ``dest``."""
+    """Return the single nonempty new audio file; ambiguous output is not success."""
     candidates = []
     for full in _audio_files(dest) - before:
         try:
-            candidates.append((os.path.getsize(full), full))
+            if os.path.getsize(full) > 0 and not os.path.islink(full):
+                candidates.append(full)
         except OSError:
             continue
-    if not candidates:
-        return None
-    candidates.sort(reverse=True)
-    return candidates[0][1]
+    return candidates[0] if len(candidates) == 1 else None
 
 
 class WorkerPool:
@@ -65,6 +65,8 @@ class WorkerPool:
         registry: ProviderRegistry,
         navidrome,
         session_factory,
+        invalidate_library=None,
+        on_library_confirmed=None,
     ) -> None:
         self.settings = settings
         self.queue = queue
@@ -75,7 +77,16 @@ class WorkerPool:
         self._tasks: list[asyncio.Task] = []
         self._active: dict[str, asyncio.Task] = {}
         self._cancelled: set[str] = set()
-        self._confirm_tasks: set[asyncio.Task] = set()
+        self._dest_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
+        self.library_sync = LibrarySync(
+            settings=settings,
+            session_factory=session_factory,
+            navidrome=navidrome,
+            broker=broker,
+            invalidate=invalidate_library,
+            on_confirmed=on_library_confirmed,
+            destination_locks=self._dest_locks,
+        )
         self._next_idx = 0
 
     async def _effective_concurrency(self) -> int:
@@ -86,12 +97,12 @@ class WorkerPool:
             async with self.session_factory() as session:
                 raw = await get_setting(session, "download_concurrency")
             if raw is not None:
-                return max(1, int(raw))
+                return max(1, min(16, int(raw)))
         except Exception:
             log.warning(
                 "Could not read download_concurrency override; using default", exc_info=True
             )
-        return max(1, self.settings.download_concurrency)
+        return max(1, min(16, self.settings.download_concurrency))
 
     async def _download_layout(self) -> str:
         """Persisted folder-structure template (Settings UI) or the env-driven default."""
@@ -112,6 +123,7 @@ class WorkerPool:
         self._tasks.append(asyncio.create_task(self._run(idx)))
 
     async def start(self) -> None:
+        await self.library_sync.start()
         n = await self._effective_concurrency()
         for _ in range(n):
             self._spawn_worker()
@@ -129,15 +141,16 @@ class WorkerPool:
             surplus, self._tasks = self._tasks[n:], self._tasks[:n]
             for t in surplus:
                 t.cancel()
+            await asyncio.gather(*surplus, return_exceptions=True)
         log.info("Worker pool resized to %d workers", n)
         return n
 
     async def stop(self) -> None:
-        for t in (*self._tasks, *self._confirm_tasks):
+        for t in self._tasks:
             t.cancel()
-        await asyncio.gather(*self._tasks, *self._confirm_tasks, return_exceptions=True)
+        await asyncio.gather(*self._tasks, return_exceptions=True)
         self._tasks.clear()
-        self._confirm_tasks.clear()
+        await self.library_sync.stop()
 
     def stats(self) -> dict:
         """Live pool snapshot for the health endpoint."""
@@ -145,9 +158,9 @@ class WorkerPool:
 
     def cancel(self, job_id: str) -> bool:
         """Request cancellation of a running job. Returns True if it was active."""
-        self._cancelled.add(job_id)
         task = self._active.get(job_id)
         if task is not None:
+            self._cancelled.add(job_id)
             task.cancel()
             return True
         return False
@@ -175,9 +188,43 @@ class WorkerPool:
         await self.broker.publish(payload)
 
     async def _process(self, job_id: str) -> None:
-        async with self.session_factory() as session:
+        # Own the whole job, including retries, filesystem work and finalization, so cancel
+        # and pool shutdown cannot leave a running row stranded between subprocess attempts.
+        task = asyncio.create_task(self._process_job(job_id))
+        self._active[job_id] = task
+        try:
+            await task
+        except asyncio.CancelledError:
+            user_cancel = job_id in self._cancelled
+            async with self.session_factory() as session:
+                job = await session.get(Job, job_id)
+                if job is not None and job.status in ("queued", "running"):
+                    job.status = "canceled" if user_cancel else "queued"
+                    job.stage = "canceled" if user_cancel else None
+                    job.progress_pct = 0.0
+                    await session.commit()
+                    await self._publish(job)
+                    if not user_cancel:
+                        await self.queue.put(job_id)
+            if not user_cancel or asyncio.current_task().cancelling():
+                raise
+        except Exception as exc:
+            log.exception("download job %s crashed", job_id)
+            async with self.session_factory() as session:
+                job = await session.get(Job, job_id)
+                if job is not None and job.status in ("queued", "running"):
+                    job.status, job.stage = "error", "error"
+                    job.error = humanize_error(str(exc))[:4000]
+                    await session.commit()
+                    await self._publish(job)
+        finally:
+            self._active.pop(job_id, None)
+            self._cancelled.discard(job_id)
+
+    async def _process_job(self, job_id: str) -> None:
+        async with contextlib.AsyncExitStack() as stack, self.session_factory() as session:
             job = await session.get(Job, job_id)
-            if job is None or job.status != "queued":
+            if job is None or job.kind != "download" or job.status != "queued":
                 return
 
             provider = self.registry.get(job.provider or "")
@@ -206,7 +253,18 @@ class WorkerPool:
             dest, filename = build_dest(
                 base, layout, artist=track.artist, album=track.album, title=track.title
             )
+            dest = os.path.realpath(dest)
+            # Providers share album directories. Serialize that destination so one job cannot
+            # claim another job's file (or overwrite it while it is being inspected).
+            lock = self._dest_locks.setdefault(dest, asyncio.Lock())
+            await stack.enter_async_context(lock)
+            await session.refresh(job)
+            if job.status != "queued":
+                return
             os.makedirs(dest, exist_ok=True)
+            expected = os.path.join(dest, f"{filename}.{self.settings.default_format}")
+            if os.path.islink(expected):
+                raise RuntimeError("El archivo de destino es un enlace simbólico")
             before = _audio_files(dest)
 
             job.status, job.stage, job.progress_pct, job.error = "running", "resolving", 0.0, None
@@ -235,29 +293,9 @@ class WorkerPool:
             max_retries = max(0, int(self.settings.download_max_retries))
             attempt = 0
             while True:
-                task = asyncio.create_task(consume())
-                self._active[job_id] = task
                 try:
-                    await task
-                    break  # success → fall through to the success block
-                except asyncio.CancelledError:
-                    task.cancel()
-                    with contextlib.suppress(BaseException):
-                        await task
-                    if job_id in self._cancelled:
-                        self._cancelled.discard(job_id)
-                        job.status, job.stage = "canceled", "canceled"
-                        with contextlib.suppress(Exception):
-                            await session.commit()
-                            await self._publish(job)
-                        return
-                    # Pool shutdown / down-resize mid-job → requeue so a remaining worker (or the
-                    # next boot's rehydrate) resumes it instead of losing it.
-                    job.status, job.stage = "queued", None
-                    with contextlib.suppress(Exception):
-                        await session.commit()
-                        await self.queue.put(job_id)
-                    raise
+                    await consume()
+                    break
                 except SubprocessError as exc:
                     if attempt < max_retries and is_transient(str(exc)):
                         attempt += 1
@@ -274,13 +312,6 @@ class WorkerPool:
                             await session.commit()
                         await self._publish(job, message=f"Reintentando ({attempt}/{max_retries})…")
                         await asyncio.sleep(delay)
-                        if job_id in self._cancelled:  # cancelled during the backoff
-                            self._cancelled.discard(job_id)
-                            job.status, job.stage = "canceled", "canceled"
-                            with contextlib.suppress(Exception):
-                                await session.commit()
-                                await self._publish(job)
-                            return
                         continue
                     log.warning("download job %s failed: %s", job_id, exc)
                     job.status, job.error, job.stage = (
@@ -301,12 +332,26 @@ class WorkerPool:
                     await session.commit()
                     await self._publish(job)
                     return
-                finally:
-                    self._active.pop(job_id, None)
 
             # ── success ──
-            job.result_path = _pick_new_audio(dest, before)
-            job.status, job.progress_pct, job.stage = "done", 100.0, "done"
+            if provider.id in {"spotdl", "ytdlp"}:
+                expected = os.path.join(dest, f"{filename}.{self.settings.default_format}")
+                if os.path.islink(expected):
+                    raise RuntimeError("El archivo de destino es un enlace simbólico")
+                job.result_path = (
+                    expected if os.path.isfile(expected) and os.path.getsize(expected) > 0 else None
+                )
+            else:
+                job.result_path = _pick_new_audio(dest, before)
+            if job.result_path is None:
+                raise RuntimeError(
+                    "La herramienta terminó sin producir una única pista de audio válida"
+                )
+
+            job.stage = "tagging"
+            await session.commit()
+            await self._publish(job)
+            await tag_audio(job.result_path, track)
 
             # Probe the real file: record its actual bitrate, and flag a gross duration mismatch
             # (usually a wrong-source resolution) as a non-fatal warning on the job.
@@ -326,9 +371,6 @@ class WorkerPool:
                             probe["duration_s"],
                             track.duration_s,
                         )
-            await session.commit()
-            await self._publish(job)
-
             try:
                 from backend.app.library.tracker import record_download
 
@@ -344,78 +386,23 @@ class WorkerPool:
                 )
             except Exception:
                 log.exception("library bookkeeping failed for job %s", job_id)
+                raise
+            job.status, job.progress_pct, job.stage = "done", 100.0, "done"
+            job.library_status = "pending" if self.navidrome is not None else "unconfigured"
+            job.library_confirmed = None
+            job.library_attempts = 0
+            job.library_prepared = True
+            job.library_error = (
+                None
+                if self.navidrome is not None
+                else "Navidrome no está configurado. Puedes escuchar el archivo aquí."
+            )
+            job.library_next_retry_at = None
+            await session.commit()
+            await self._publish(job)
 
-        # ── confirm in Navidrome (detached: don't hold the worker slot during the rescan) ──
-        if self.navidrome is not None:
-            t = asyncio.create_task(self._confirm_in_library(job_id, track))
-            self._confirm_tasks.add(t)
-            t.add_done_callback(self._confirm_tasks.discard)
+        self.library_sync.wake()
 
     async def recheck(self, job_id: str) -> bool:
-        """Re-run the Navidrome confirmation for a finished download (the rescan may lag)."""
-        if self.navidrome is None:
-            return False
-        async with self.session_factory() as session:
-            job = await session.get(Job, job_id)
-            if job is None or job.kind != "download":
-                return False
-            try:
-                track = TrackRef.from_dict(json.loads(job.track_json or "{}"))
-            except Exception:
-                return False
-            job.library_confirmed = None
-            await session.commit()
-            await self._publish(job, message="Re-comprobando en Navidrome…")
-        # Trigger a fresh scan first — the file may simply not have been indexed yet.
-        with contextlib.suppress(Exception):
-            await self.navidrome.start_scan()
-        t = asyncio.create_task(self._confirm_in_library(job_id, track))
-        self._confirm_tasks.add(t)
-        t.add_done_callback(self._confirm_tasks.discard)
+        await self.library_sync.retry(job_id)
         return True
-
-    async def _confirm_in_library(self, job_id: str, track: TrackRef) -> None:
-        """After the post-download rescan, wait for it to settle and check the track is indexed.
-
-        Sets ``job.library_confirmed`` (True/False) and publishes it so the queue can show whether
-        the file actually made it into Navidrome — not just that a download finished.
-        """
-        try:
-            # Give the rescan time to settle: poll scanStatus, then fall back to a fixed wait.
-            for _ in range(15):  # ~30s max
-                try:
-                    status = await self.navidrome.get_scan_status()
-                except Exception:
-                    break
-                if not status.get("scanning"):
-                    break
-                await asyncio.sleep(2)
-
-            match = await library_quality(
-                self.navidrome,
-                artist=track.artist,
-                title=track.title,
-                album=track.album,
-                duration_s=track.duration_s,
-                isrc=track.isrc,
-            )
-            confirmed = match is not None
-
-            async with self.session_factory() as session:
-                job = await session.get(Job, job_id)
-                if job is None:
-                    return
-                job.library_confirmed = confirmed
-                await session.commit()
-                await self._publish(
-                    job,
-                    message=(
-                        "Confirmada en Navidrome"
-                        if confirmed
-                        else "Descargada, pero aún no aparece en Navidrome"
-                    ),
-                )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            log.exception("Navidrome confirmation failed for job %s", job_id)

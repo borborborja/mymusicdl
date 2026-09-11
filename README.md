@@ -8,9 +8,14 @@ qualities are available per source, download one track or a batch, and let the a
 The downloaded file is written **directly into the Navidrome library volume** (the same shared
 volume Navidrome mounts — e.g. an `rclone` remote), and Navidrome is asked to rescan.
 
-> Status: **initial scaffold**. The free path (`spotdl` + `yt-dlp`) is wired end-to-end-ready.
-> Paid lossless sources (Tidal / Qobuz / Deezer via `streamrip`, plus `tiddl` for Tidal) are
-> implemented as **adapters that stay disabled until you add credentials**.
+The **Discover** homepage brings together your Navidrome collection, artist-based suggestions and
+shared family picks. Save tracks for later, mark favorites, and explicitly send a saved track to the
+download queue. **Library** searches the full indexed Navidrome catalog, including music imported
+outside this app. You can audition downloaded files and original Navidrome audio in the browser.
+
+> Status: first discovery delivery implemented locally. Free downloads use `spotdl` / `yt-dlp`;
+> paid adapters still require resolver work before activation is usable. See the
+> [verification scope and release checks](docs/DISCOVERY.md).
 
 ## Documentation
 
@@ -22,6 +27,7 @@ golden rules that keep the project from breaking. Deeper docs live in [`docs/`](
 - [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) — owner-designated product/architecture decisions.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — planned work to keep in mind when coding now.
 - [`docs/VERIFICATION.md`](docs/VERIFICATION.md) — how to verify each kind of change.
+- [`docs/DISCOVERY.md`](docs/DISCOVERY.md) — discovery, full catalog, shared picks and verification.
 - [`docs/DEPLOY.md`](docs/DEPLOY.md) — build + deploy + the GHCR package-visibility gotcha.
 
 ## Architecture
@@ -91,9 +97,9 @@ download the app calls Subsonic `startScan`.
 
 ## Enabling paid lossless sources later
 
-The `streamrip` (Tidal/Qobuz/Deezer) and `tiddl` (Tidal) adapters ship disabled. Add credentials —
-via the **Settings** page or the `TIDAL_TOKEN` / `QOBUZ_TOKEN` / `DEEZER_ARL` env vars — and the
-provider registry starts surfacing them in search and quality badges. No code changes needed.
+The `streamrip` (Tidal/Qobuz/Deezer) and `tiddl` (Tidal) adapters ship disabled. Credentials are
+required for activation, but native source resolution remains planned work; see the
+[roadmap](docs/ROADMAP.md) before enabling these adapters.
 
 ## Updating the downloader tools
 

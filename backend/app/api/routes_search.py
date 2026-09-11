@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from backend.app.deps import get_aggregator
 from backend.app.schemas.search import SearchResponseDTO
@@ -15,7 +15,7 @@ router = APIRouter()
 async def search(
     q: str = "",
     kind: str = "song",
-    limit: int = 20,
+    limit: int = Query(default=20, ge=1),
     providers: str | None = None,
     lossless_only: bool = False,
     artist: str | None = None,
@@ -37,8 +37,16 @@ async def search(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except httpx.TimeoutException as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="El catálogo musical tardó demasiado en responder. Vuelve a intentarlo.",
+        ) from exc
     except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"Metadata source error: {exc}") from exc
+        raise HTTPException(
+            status_code=502,
+            detail="No se pudo consultar el catálogo musical. Vuelve a intentarlo en unos momentos.",
+        ) from exc
 
 
 @router.get("/search/source")

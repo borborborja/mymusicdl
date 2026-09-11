@@ -28,12 +28,19 @@ export default function AlbumPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    let active = true;
     setLoading(true);
+    setError(null);
+    setDetail(null);
+    setSelected(new Set());
+    setBatchProvider("");
+    setBanner(null);
     api
       .album(provider, id)
-      .then(setDetail)
-      .catch((e) => setError((e as Error).message))
-      .finally(() => setLoading(false));
+      .then((value) => { if (active) setDetail(value); })
+      .catch((e) => { if (active) setError((e as Error).message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [provider, id]);
 
   const providersAvail = useMemo(() => {
@@ -44,9 +51,11 @@ export default function AlbumPage() {
 
   const tiersAvail = useMemo(() => {
     const s = new Set<number>();
-    detail?.tracks.forEach((t) => t.providers.forEach((p) => p.qualities.forEach((q) => s.add(q.tier))));
+    detail?.tracks.forEach((t) => t.providers
+      .filter((p) => p.provider === batchProvider)
+      .forEach((p) => p.qualities.forEach((q) => s.add(q.tier))));
     return Array.from(s).sort((a, b) => a - b);
-  }, [detail]);
+  }, [detail, batchProvider]);
 
   useEffect(() => {
     if (providersAvail.length && !batchProvider) setBatchProvider(providersAvail[0].id);
@@ -75,6 +84,7 @@ export default function AlbumPage() {
       const items = Array.from(selected)
         .map((i): DownloadItemInput | null => {
           const t = detail.tracks[i];
+          if (!t) return null;
           const opts = flattenOptions(t);
           const match =
             opts.find((o) => o.provider === batchProvider && o.tier === batchTier) ||

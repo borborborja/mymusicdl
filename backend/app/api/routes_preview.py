@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from backend.app.deps import SettingsDep
+from backend.app.deps import AuthDep, SettingsDep
 from backend.app.downloads.preview import resolve_stream_url
 
 router = APIRouter()
@@ -13,6 +13,7 @@ router = APIRouter()
 @router.get("/preview")
 async def preview(
     settings: SettingsDep,
+    _auth: AuthDep,
     artist: str,
     title: str,
     source_url: str | None = None,

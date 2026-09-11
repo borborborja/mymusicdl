@@ -22,6 +22,7 @@ class ProviderQualitiesDTO(BaseModel):
 
 class LibraryMatchDTO(BaseModel):
     in_library: bool = False
+    availability_known: bool = True
     navidrome_id: str | None = None
     quality: QualityOptionDTO | None = None
     can_upgrade: bool = False  # in library, but a better tier is downloadable
@@ -36,6 +37,7 @@ class TrackResultDTO(BaseModel):
     duration_s: int | None = None
     cover_url: str | None = None
     ext_ids: dict[str, str] = Field(default_factory=dict)
+    album_artist: str | None = None
     providers: list[ProviderQualitiesDTO] = Field(default_factory=list)
     library: LibraryMatchDTO = Field(default_factory=LibraryMatchDTO)
     best_tier: int | None = None

@@ -59,8 +59,14 @@ class TelegramBot(BotAdapter):
 
     async def _call(self, method: str, **params) -> object:
         assert self._http is not None
-        resp = await self._http.post(self._url(method), json=params)
-        resp.raise_for_status()
+        try:
+            resp = await self._http.post(self._url(method), json=params)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            # HTTPX includes the full /bot<TOKEN>/ URL in its exception text.
+            raise RuntimeError(f"Telegram {method}: HTTP {exc.response.status_code}") from None
+        except httpx.RequestError:
+            raise RuntimeError(f"Telegram {method}: connection failed") from None
         data = resp.json()
         if not data.get("ok"):
             raise RuntimeError(data.get("description", "telegram error"))

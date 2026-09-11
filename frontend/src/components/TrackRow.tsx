@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { collectionChanged } from "../lib/useCollection";
 import { api } from "../lib/api";
 import { togglePreview, usePreview } from "../lib/preview";
 import type { Job, TrackResult } from "../lib/types";
@@ -23,7 +24,7 @@ function PreviewButton({ track }: { track: TrackResult }) {
     <button
       type="button"
       onClick={onClick}
-      title="Escuchar el audio real antes de descargar"
+      title="Vista previa externa orientativa; comprueba el archivo después de descargar"
       aria-label={active && st.status === "playing" ? "Pausar vista previa" : "Escuchar vista previa"}
       className={`shrink-0 rounded-full border border-slate-700 px-2 py-1 text-xs ${
         active ? "bg-brand text-slate-950" : "text-slate-300 hover:bg-slate-800"
@@ -101,6 +102,10 @@ export default function TrackRow({
         </div>
       </div>
       <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto">
+        <button className="btn-ghost text-xs" disabled={busy} onClick={() => {
+          setBusy(true);
+          void api.preference({...toTrackPayload(track), ext_ids: track.ext_ids ?? {}}, {saved: true}).then(() => {collectionChanged();setErr(null);}).catch(e => setErr(e.message)).finally(() => setBusy(false));
+        }}>Guardar para después</button>
         <PreviewButton track={track} />
         {options.length ? (
           <>

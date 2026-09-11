@@ -43,6 +43,10 @@ class Updater:
         self.broker = broker
         self._task: asyncio.Task | None = None
         self._running = False
+        self._updates: dict[str, asyncio.Task] = {}
+        self._update_names: dict[str, str] = {}
+        self._start_lock = asyncio.Lock()
+        self._install_lock = asyncio.Lock()
 
     async def start(self) -> None:
         self._running = True
@@ -53,6 +57,25 @@ class Updater:
         if self._task is not None:
             self._task.cancel()
             await asyncio.gather(self._task, return_exceptions=True)
+        job_ids = list(self._updates)
+        tasks = list(self._updates.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        async with self.session_factory() as session:
+            for job_id in job_ids:
+                job = await session.get(Job, job_id)
+                if job is not None and job.status in ("queued", "running"):
+                    job.status, job.stage = "canceled", "canceled"
+                    await session.commit()
+                    await self._publish_job(job)
+
+    def cancel(self, job_id: str) -> bool:
+        task = self._updates.get(job_id)
+        if task is None:
+            return False
+        task.cancel()
+        return True
 
     async def _loop(self) -> None:
         try:
@@ -101,20 +124,37 @@ class Updater:
         log.info("Version check complete")
 
     async def start_update(self, name: str) -> str:
+        if name not in {tool["name"] for tool in TRACKED_TOOLS}:
+            raise ValueError(f"Unknown tool '{name}'")
+        async with self._start_lock:
+            existing = self._update_names.get(name)
+            if existing is not None:
+                return existing
+            return await self._start_update(name)
+
+    async def _start_update(self, name: str) -> str:
         job_id = str(uuid4())
         async with self.session_factory() as session:
             session.add(
                 Job(
                     id=job_id,
                     kind="tool_update",
-                    status="running",
+                    status="queued",
                     provider=name,
                     title=f"Update {name}",
-                    stage="installing",
+                    stage="queued",
                 )
             )
             await session.commit()
-        asyncio.create_task(self._run_update(job_id, name))
+        self._update_names[name] = job_id
+        task = asyncio.create_task(self._run_update(job_id, name))
+        self._updates[job_id] = task
+
+        def finished(_task):
+            self._updates.pop(job_id, None)
+            self._update_names.pop(name, None)
+
+        task.add_done_callback(finished)
         return job_id
 
     async def _publish_job(self, job: Job, message: str | None = None) -> None:
@@ -124,12 +164,28 @@ class Updater:
         await self.broker.publish(payload)
 
     async def _run_update(self, job_id: str, name: str) -> None:
+        try:
+            async with self._install_lock:
+                await self._install_update(job_id, name)
+        except asyncio.CancelledError:
+            async with self.session_factory() as session:
+                job = await session.get(Job, job_id)
+                if job is not None and job.status in ("queued", "running"):
+                    job.status, job.stage = "canceled", "canceled"
+                    await session.commit()
+                    await self._publish_job(job)
+            raise
+
+    async def _install_update(self, job_id: str, name: str) -> None:
         cmd = pip_update_cmd(self.settings, name)
 
         async with self.session_factory() as session:
             job = await session.get(Job, job_id)
-            if job is None:
+            if job is None or job.status != "queued":
                 return
+            job.status, job.stage = "running", "installing"
+            await session.commit()
+            await self._publish_job(job)
 
             def parse(line: str) -> ProgressEvent:
                 return ProgressEvent(job_id=job_id, stage="installing", message=line)

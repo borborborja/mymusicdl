@@ -4,8 +4,10 @@ import { NavLink } from "react-router-dom";
 import { useJobs } from "../store/jobs";
 
 const tabs = [
-  { to: "/", label: "Buscar", end: true },
+  { to: "/", label: "Descubrir", end: true },
+  { to: "/search", label: "Buscar" },
   { to: "/library", label: "Biblioteca" },
+  { to: "/saved", label: "Pendientes" },
   { to: "/queue", label: "Descargas" },
   { to: "/tools", label: "Herramientas" },
   { to: "/settings", label: "Ajustes" },

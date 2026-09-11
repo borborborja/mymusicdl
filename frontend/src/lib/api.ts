@@ -1,5 +1,10 @@
 import type {
   AlbumDetail,
+  CatalogPage,
+  CollectionCard,
+  CollectionTrack,
+  DiscoveryPage,
+  FamilyArtist,
   BotStatus,
   DownloadItemInput,
   Job,
@@ -29,7 +34,11 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     let detail = res.statusText;
     try {
-      detail = (await res.json()).detail ?? detail;
+      const value: unknown = (await res.json()).detail;
+      if (typeof value === "string") detail = value;
+      else if (Array.isArray(value)) {
+        detail = value.map((issue) => `${issue.loc?.join(".") ?? ""}: ${issue.msg ?? "Invalid value"}`).join("; ");
+      }
     } catch {
       /* ignore */
     }
@@ -51,6 +60,17 @@ export interface SearchParams {
 }
 
 export const api = {
+  catalog: (q = "", offset = 0, sort = "artist", limit = 40, snapshot?: string | null) => req<CatalogPage>(`/catalog/tracks?${new URLSearchParams({ q, offset: String(offset), sort, limit: String(limit), ...(snapshot ? {snapshot} : {}) })}`),
+  refreshCatalog: () => req<unknown>("/catalog/refresh", { method: "POST" }),
+  discovery: (kind: "local" | "external") => req<DiscoveryPage>(`/discovery?kind=${kind}`),
+  familyTracks: (mode = "saved", offset = 0) => req<{items: CollectionCard[]; has_more: boolean}>(`/family/tracks?${new URLSearchParams({ mode, offset: String(offset) })}`),
+  preference: (track: CollectionTrack, flags: {saved?: boolean; favorite?: boolean; dismissed?: boolean}) => req<CollectionCard>("/family/tracks", {method: "PUT", body: JSON.stringify({track, ...flags})}),
+  familyDownload: (id: string, provider = "ytdlp") => req<{job_id: string}>(`/family/tracks/${encodeURIComponent(id)}/download`, {method: "POST", body: JSON.stringify({provider, quality: 1})}),
+  familyArtists: () => req<FamilyArtist[]>("/family/artists"),
+  artistChoices: (q: string) => req<FamilyArtist[]>(`/family/artist-search?${new URLSearchParams({q})}`),
+  chooseArtist: (artist: FamilyArtist) => req<unknown>("/family/artists", {method: "PUT", body: JSON.stringify(artist)}),
+  removeArtist: (id: string) => req<unknown>(`/family/artists/${encodeURIComponent(id)}`, {method: "DELETE"}),
+  catalogPlayback: (id: string) => req<{url: string}>(`/catalog/tracks/${encodeURIComponent(id)}/playback`, {method: "POST"}),
   health: () => req<Record<string, unknown>>("/health"),
 
   search: ({ q, kind, artist, album, year, providers, losslessOnly, limit }: SearchParams) => {
@@ -76,6 +96,9 @@ export const api = {
 
   enqueue: (items: DownloadItemInput[]) =>
     req<Job[]>("/downloads", { method: "POST", body: JSON.stringify({ items }) }),
+
+  jobPlayback: (id: string) => req<{ url: string }>(`/jobs/${encodeURIComponent(id)}/playback`, { method: "POST" }),
+  libraryPlayback: (id: number) => req<{ url: string }>(`/library/items/${id}/playback`, { method: "POST" }),
 
   listJobs: () => req<Job[]>("/jobs?limit=200"),
   cancelJob: (id: string) => req<Job>(`/jobs/${id}/cancel`, { method: "POST" }),

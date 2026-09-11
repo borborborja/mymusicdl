@@ -18,7 +18,7 @@ from backend.app.providers.base import TrackRef
 log = get_logger(__name__)
 
 _BASE = "https://musicbrainz.org/ws/2"
-_UA = "mymusicdl/0.1 (https://github.com/; self-hosted family music tool)"
+_UA = "mymusicdl/0.1 (https://github.com/borborborja/mymusicdl)"
 _MIN_INTERVAL_S = 1.1  # MusicBrainz asks for ~1 request/second; stay just under it
 
 # Cover Art Archive — free, keyless artwork keyed by MusicBrainz MBIDs. Not every release has art,
@@ -111,6 +111,7 @@ class MusicBrainzMetadata(MetadataProvider):
                     title=rec.get("title", ""),
                     artist=self._artist_credit(rec),
                     album=album,
+                    album_artist=self._artist_credit(releases[0]) if releases else None,
                     source_url=None,
                     isrc=(rec.get("isrcs") or [None])[0],
                     duration_s=int(length) // 1000 if length else None,
@@ -154,6 +155,19 @@ class MusicBrainzMetadata(MetadataProvider):
             )
         return out
 
+    async def artist_choices(self, query: str) -> list[dict]:
+        data = await self._get("/artist", {"query": query, "limit": 10})
+        return [
+            {
+                "id": a["id"],
+                "name": a.get("name", ""),
+                "disambiguation": " · ".join(
+                    filter(None, [a.get("disambiguation"), a.get("country"), a.get("type")])
+                ),
+            }
+            for a in data.get("artists", [])
+        ]
+
     async def search_artists(self, query: str, limit: int = 20) -> list[ArtistRef]:
         data = await self._get("/artist", {"query": query, "limit": limit})
         return [
@@ -183,13 +197,17 @@ class MusicBrainzMetadata(MetadataProvider):
         tracks: list[TrackRef] = []
         for medium in rel.get("media") or []:
             for tr in medium.get("tracks") or []:
+                recording = tr.get("recording") or {}
                 length = tr.get("length")
                 tracks.append(
                     TrackRef(
                         provider_id=None,
                         title=tr.get("title", ""),
-                        artist=self._artist_credit(rel),
+                        artist=self._artist_credit(tr)
+                        or self._artist_credit(recording)
+                        or self._artist_credit(rel),
                         album=rel.get("title"),
+                        album_artist=self._artist_credit(rel) or None,
                         duration_s=int(length) // 1000 if length else None,
                         cover_url=cover,
                     )

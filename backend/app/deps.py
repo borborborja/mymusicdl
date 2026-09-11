@@ -7,6 +7,7 @@ accessors read them back for routers.
 
 from __future__ import annotations
 
+import secrets
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -64,7 +65,7 @@ def require_auth(
     expected = settings.app_shared_password
     if not expected:
         return
-    if x_app_password != expected:
+    if not secrets.compare_digest((x_app_password or "").encode(), expected.encode()):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid X-App-Password",

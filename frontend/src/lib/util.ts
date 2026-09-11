@@ -40,6 +40,7 @@ export function toTrackPayload(t: TrackResult): DownloadItemInput["track"] {
     title: t.title,
     artist: t.artist,
     album: t.album ?? null,
+    album_artist: t.album_artist ?? null,
     source_url: t.source_url ?? null,
     isrc: t.isrc ?? null,
     duration_s: t.duration_s ?? null,

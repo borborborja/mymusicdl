@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
+import DownloadedAudio from "../components/DownloadedAudio";
 import ProgressBar from "../components/ProgressBar";
 import { useToast } from "../components/Toaster";
 import { api } from "../lib/api";
 import { formatDuration } from "../lib/util";
-import { removeFinished, removeJob, setJobs, useJobs } from "../store/jobs";
+import { removeJob, setJobs, upsertJob, useJobs } from "../store/jobs";
 
 const TERMINAL = ["done", "error", "canceled"];
 
@@ -33,7 +34,7 @@ export default function QueuePage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    api.listJobs().then(setJobs).catch(() => undefined);
+    api.listJobs().then(setJobs).catch((e) => toast.error((e as Error).message));
   }, []);
 
   const shown = useMemo(() => {
@@ -60,32 +61,37 @@ export default function QueuePage() {
   const toggleAll = () =>
     setSelected(allShownSelected ? new Set() : new Set(shown.map((j) => j.id)));
 
-  const cancel = (id: string) => void api.cancelJob(id).catch(() => undefined);
-  const retry = (id: string) => void api.retryJob(id).catch(() => undefined);
-  const recheck = (id: string) => void api.recheckJob(id).catch(() => undefined);
+  const actionError = (e: unknown) => toast.error((e as Error).message);
+  const cancel = (id: string) => void api.cancelJob(id).then(upsertJob).catch(actionError);
+  const retry = (id: string) => void api.retryJob(id).then(upsertJob).catch(actionError);
+  const recheck = (id: string) => void api.recheckJob(id).then(upsertJob).catch(actionError);
   const remove = async (id: string) => {
     if (!(await confirm({ title: "¿Quitar esta descarga de la lista?", danger: true, confirmLabel: "Quitar" })))
       return;
-    removeJob(id);
-    void api.deleteJob(id).catch(() => undefined);
+    try {
+      await api.deleteJob(id);
+      removeJob(id);
+    } catch (e) { actionError(e); }
   };
   const clearFinished = async () => {
     if (
       !(await confirm({
         title: "¿Limpiar las descargas terminadas?",
-        body: "Se quitan de la lista las completadas, con error y canceladas.",
+        body: "Se quitan las terminadas, con error y canceladas. Las pendientes de sincronizar con Navidrome se conservan.",
         confirmLabel: "Limpiar",
         danger: true,
       }))
     )
       return;
-    removeFinished();
-    void api.clearJobs().catch(() => undefined);
+    try {
+      await api.clearJobs();
+      setJobs(await api.listJobs());
+    } catch (e) { actionError(e); }
   };
   const recheckAll = () => {
     jobs
       .filter((j) => j.status === "done" && j.library_confirmed === false)
-      .forEach((j) => void api.recheckJob(j.id).catch(() => undefined));
+      .forEach((j) => recheck(j.id));
   };
   const reindex = () => {
     toast.show("Reindexando Navidrome…");
@@ -100,12 +106,12 @@ export default function QueuePage() {
   const batchCancel = () => {
     selectedJobs()
       .filter((j) => j.status === "queued" || j.status === "running")
-      .forEach((j) => void api.cancelJob(j.id).catch(() => undefined));
+      .forEach((j) => cancel(j.id));
   };
   const batchRetry = () => {
     selectedJobs()
-      .filter((j) => j.status === "error" || j.status === "canceled")
-      .forEach((j) => void api.retryJob(j.id).catch(() => undefined));
+      .filter((j) => j.kind === "download" && (j.status === "error" || j.status === "canceled"))
+      .forEach((j) => retry(j.id));
   };
   const batchRemove = async () => {
     const ids = selectedJobs()
@@ -120,10 +126,12 @@ export default function QueuePage() {
       }))
     )
       return;
-    ids.forEach((id) => {
-      removeJob(id);
-      void api.deleteJob(id).catch(() => undefined);
-    });
+    await Promise.all(ids.map(async (id) => {
+      try {
+        await api.deleteJob(id);
+        removeJob(id);
+      } catch (e) { actionError(e); }
+    }));
     setSelected(new Set());
   };
 
@@ -240,7 +248,7 @@ export default function QueuePage() {
                     Cancelar
                   </button>
                 )}
-                {(j.status === "error" || j.status === "canceled") && (
+                {j.kind === "download" && (j.status === "error" || j.status === "canceled") && (
                   <button className="btn-ghost px-2 py-1 text-xs" onClick={() => retry(j.id)}>
                     Reintentar
                   </button>
@@ -270,32 +278,29 @@ export default function QueuePage() {
               </div>
             )}
             {j.error && <p className="mt-2 whitespace-pre-wrap text-xs text-red-400">{j.error}</p>}
-            {j.status === "done" && (
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <span
-                  className={`text-xs ${
-                    j.library_confirmed === true
-                      ? "text-emerald-400"
-                      : j.library_confirmed === false
-                        ? "text-amber-400"
-                        : "text-slate-400"
-                  }`}
-                >
-                  {j.library_confirmed === true
-                    ? "✓ en Navidrome"
-                    : j.library_confirmed === false
-                      ? "⚠ aún no aparece en Navidrome"
-                      : "⏳ comprobando en Navidrome…"}
-                </span>
-                {j.library_confirmed === false && (
-                  <button
-                    className="btn-ghost px-2 py-0.5 text-xs"
-                    title="Volver a comprobar en Navidrome"
-                    onClick={() => recheck(j.id)}
-                  >
-                    ↻ Re-comprobar
-                  </button>
-                )}
+            {j.kind === "download" && j.status === "done" && (
+              <div className="mt-2 space-y-1">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className={j.library_confirmed ? "text-emerald-400" : "text-amber-400"}>
+                    {j.library_confirmed ? "✓ Archivo confirmado en Navidrome"
+                      : j.library_status === "unconfigured" ? "Navidrome no configurado"
+                      : j.library_status === "syncing" ? "⏳ Escaneando y comprobando Navidrome…"
+                      : j.library_status === "error" ? "⚠ No se pudo confirmar en Navidrome"
+                      : "⏳ Pendiente de sincronizar con Navidrome"}
+                  </span>
+                  {!j.library_confirmed && j.library_status !== "unconfigured" && (
+                    <button className="btn-ghost px-2 py-0.5 text-xs"
+                      disabled={j.library_status === "syncing"}
+                      onClick={() => recheck(j.id)}>
+                      ↻ Reintentar sincronización
+                    </button>
+                  )}
+                </div>
+                {j.library_error && <p className="text-xs text-amber-300">{j.library_error}</p>}
+                {j.library_next_retry_at && <p className="text-xs text-slate-400">
+                  Próximo intento automático: {new Date(j.library_next_retry_at).toLocaleTimeString()}
+                </p>}
+                {j.result_path && <DownloadedAudio jobId={j.id} title={j.title ?? "Pista"} />}
               </div>
             )}
             {j.status === "done" && j.result_path && (

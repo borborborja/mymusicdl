@@ -1,5 +1,4 @@
-"""Post-download bookkeeping: record what we downloaded (and at what quality) and ask Navidrome to
-rescan so the file shows up in the library."""
+"""Record the downloaded file and quality; LibrarySync coordinates Navidrome delivery."""
 
 from __future__ import annotations
 
@@ -84,9 +83,4 @@ async def record_download(
         )
     await session.commit()
 
-    if navidrome is not None:
-        try:
-            await navidrome.start_scan()
-            log.info("Triggered Navidrome rescan after %s", fields["file_path"])
-        except Exception:
-            log.warning("Navidrome rescan failed", exc_info=True)
+    # Navidrome scans are coordinated by LibrarySync after the job is durably marked done.

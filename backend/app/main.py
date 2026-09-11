@@ -70,6 +70,9 @@ async def lifespan(app: FastAPI):
     from backend.app.downloads.progress import ProgressBroker
     from backend.app.downloads.queue import DownloadQueue
     from backend.app.downloads.worker import WorkerPool
+    from backend.app.library.catalog import Catalog
+    from backend.app.library.discovery import Discovery
+    from backend.app.library.family import Family
     from backend.app.metadata.aggregator import SearchAggregator
     from backend.app.navidrome.client import build_navidrome
     from backend.app.providers.registry import build_registry
@@ -82,6 +85,18 @@ async def lifespan(app: FastAPI):
     aggregator = SearchAggregator(
         settings=settings, registry=registry, navidrome=navidrome, session_factory=SessionLocal
     )
+    catalog = Catalog(
+        settings=settings, session_factory=SessionLocal, navidrome=navidrome, broker=broker
+    )
+    discovery = Discovery(settings=settings, session_factory=SessionLocal, broker=broker)
+    family = Family(
+        settings=settings,
+        session_factory=SessionLocal,
+        catalog=catalog,
+        broker=broker,
+        queue=queue,
+        registry=registry,
+    )
     worker = WorkerPool(
         settings=settings,
         queue=queue,
@@ -89,6 +104,8 @@ async def lifespan(app: FastAPI):
         registry=registry,
         navidrome=navidrome,
         session_factory=SessionLocal,
+        invalidate_library=aggregator.invalidate_library,
+        on_library_confirmed=catalog.accept_song,
     )
     updater = Updater(settings=settings, session_factory=SessionLocal, broker=broker, queue=queue)
     bots = BotManager(
@@ -100,6 +117,9 @@ async def lifespan(app: FastAPI):
         aggregator=aggregator,
     )
 
+    app.state.catalog = catalog
+    app.state.discovery = discovery
+    app.state.family = family
     app.state.settings = settings
     app.state.broker = broker
     app.state.registry = registry
@@ -119,6 +139,8 @@ async def lifespan(app: FastAPI):
         removed = await prune_old_jobs(session, settings.job_retention_days)
         if removed:
             log.info("Pruned %d old finished job(s)", removed)
+    await catalog.start()
+    await discovery.start()
     await worker.start()
     await updater.start()
     await bots.start()
@@ -129,7 +151,10 @@ async def lifespan(app: FastAPI):
         log.info("Shutting down mymusicdl")
         await bots.stop()
         await worker.stop()
+        await discovery.stop()
+        await catalog.stop()
         await updater.stop()
+        await aggregator.aclose()
         if navidrome is not None:
             await navidrome.aclose()
 
@@ -141,17 +166,20 @@ def create_app() -> FastAPI:
     from backend.app.api import (
         routes_album,
         routes_bots,
+        routes_collection,
         routes_downloads,
         routes_events,
         routes_health,
         routes_jobs,
         routes_library,
+        routes_media,
         routes_preview,
         routes_search,
         routes_settings,
         routes_tools,
     )
 
+    app.include_router(routes_collection.router, prefix="/api", tags=["collection"])
     app.include_router(routes_health.router, prefix="/api", tags=["health"])
     app.include_router(routes_search.router, prefix="/api", tags=["search"])
     app.include_router(routes_album.router, prefix="/api", tags=["album"])
@@ -159,6 +187,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_downloads.router, prefix="/api", tags=["downloads"])
     app.include_router(routes_jobs.router, prefix="/api", tags=["jobs"])
     app.include_router(routes_library.router, prefix="/api", tags=["library"])
+    app.include_router(routes_media.router, prefix="/api", tags=["media"])
     app.include_router(routes_tools.router, prefix="/api", tags=["tools"])
     app.include_router(routes_settings.router, prefix="/api", tags=["settings"])
     app.include_router(routes_bots.router, prefix="/api", tags=["bots"])
@@ -174,9 +203,11 @@ def create_app() -> FastAPI:
 
         @app.get("/{full_path:path}", include_in_schema=False)
         async def spa_fallback(full_path: str):
-            if full_path.startswith("api"):
+            if full_path == "api" or full_path.startswith("api/"):
                 return JSONResponse({"detail": "Not Found"}, status_code=404)
-            candidate = STATIC_DIR / full_path
+            candidate = (STATIC_DIR / full_path).resolve()
+            if not candidate.is_relative_to(STATIC_DIR.resolve()):
+                return JSONResponse({"detail": "Not Found"}, status_code=404)
             if full_path and candidate.is_file():
                 return FileResponse(candidate)
             return FileResponse(index_file)

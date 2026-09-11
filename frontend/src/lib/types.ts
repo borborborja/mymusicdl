@@ -14,6 +14,7 @@ export interface ProviderQualities {
 }
 
 export interface LibraryMatch {
+  availability_known?: boolean;
   in_library: boolean;
   navidrome_id?: string | null;
   quality?: QualityOption | null;
@@ -29,6 +30,7 @@ export interface TrackResult {
   duration_s?: number | null;
   cover_url?: string | null;
   ext_ids: Record<string, string>;
+  album_artist?: string | null;
   providers: ProviderQualities[];
   library: LibraryMatch;
   best_tier?: number | null;
@@ -74,6 +76,10 @@ export interface Job {
   error?: string | null;
   result_path?: string | null;
   library_confirmed?: boolean | null;
+  library_status?: "pending" | "syncing" | "confirmed" | "error" | "unconfigured" | null;
+  library_error?: string | null;
+  library_attempts?: number;
+  library_next_retry_at?: string | null;
   batch_id?: string | null;
   title?: string | null;
   origin?: string | null; // web | telegram | matrix
@@ -155,5 +161,63 @@ export interface DownloadItemInput {
     duration_s?: number | null;
     cover_url?: string | null;
     ext_ids?: Record<string, string>;
+    album_artist?: string | null;
   };
+}
+
+export interface CollectionTrack {
+  title: string;
+  artist: string;
+  album?: string | null;
+  album_artist?: string | null;
+  provider_id?: string | null;
+  source_url?: string | null;
+  duration_s?: number | null;
+  isrc?: string | null;
+  cover_url?: string | null;
+  ext_ids: Record<string, string>;
+  catalog_id?: string | null;
+  reason?: string | null;
+  seed_id?: string | null;
+}
+export interface CollectionCard {
+  id: string;
+  track: CollectionTrack;
+  availability: "available" | "unknown" | "missing" | "downloading" | "pending" | "failed";
+  saved: boolean;
+  favorite: boolean;
+  dismissed: boolean;
+  reason?: string | null;
+  catalog_id?: string | null;
+  job_id?: string | null;
+  job_done: boolean;
+  local_item_id?: number | null;
+  error?: string | null;
+  format?: string | null;
+  bitrate_kbps?: number | null;
+}
+export interface CatalogStatus {
+  generation?: string | null;
+  configured: boolean;
+  refreshing: boolean;
+  updated_at: string | null;
+  stale: boolean;
+  error: string | null;
+}
+export interface CatalogPage {
+  items: CollectionCard[];
+  total: number;
+  offset: number;
+  status: CatalogStatus;
+}
+export interface FamilyArtist { id: string; name: string; disambiguation?: string; }
+export interface DiscoveryPage {
+  enabled: boolean;
+  items: CollectionCard[];
+  artists?: FamilyArtist[];
+  status?: CatalogStatus;
+  updated_at?: string | null;
+  stale?: boolean;
+  refreshing?: boolean;
+  error?: string | null;
 }

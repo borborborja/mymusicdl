@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from backend.app.db.engine import get_session
 from backend.app.db.models import LibraryItem
 from backend.app.deps import AuthDep
-from backend.app.navidrome.matcher import library_quality
+from backend.app.navidrome.matcher import LibraryUnavailable, library_quality
 from backend.app.schemas.search import LibraryMatchDTO, QualityOptionDTO
 
 router = APIRouter()
@@ -42,9 +42,18 @@ async def match(
     request: Request = None,  # type: ignore[assignment]
 ):
     navidrome = request.app.state.navidrome
-    found = await library_quality(
-        navidrome, artist=artist, title=title, album=album, duration_s=duration_s, isrc=isrc
-    )
+    try:
+        found = await library_quality(
+            navidrome,
+            artist=artist,
+            title=title,
+            album=album,
+            duration_s=duration_s,
+            isrc=isrc,
+            raise_on_unavailable=True,
+        )
+    except LibraryUnavailable:
+        return LibraryMatchDTO(availability_known=False)
     if not found:
         return LibraryMatchDTO(in_library=False)
     return LibraryMatchDTO(
@@ -55,7 +64,7 @@ async def match(
 
 
 @router.get("/library/items", response_model=list[LibraryItemDTO])
-async def items(limit: int = 100, session=Depends(get_session)):
+async def items(limit: int = Query(default=100, ge=1), session=Depends(get_session)):
     res = await session.execute(
         select(LibraryItem).order_by(LibraryItem.downloaded_at.desc()).limit(min(limit, 500))
     )

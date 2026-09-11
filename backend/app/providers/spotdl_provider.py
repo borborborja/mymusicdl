@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import AsyncIterator
+from urllib.parse import urlsplit
 
 from backend.app.downloads.runner import stream_subprocess
 from backend.app.providers.base import ProgressEvent, Provider, Quality, QualityOption, TrackRef
@@ -64,10 +65,22 @@ class SpotdlProvider(Provider):
         bitrate = self.settings.default_bitrate
         name_tpl = f"{filename}.{{output-ext}}" if filename else "{artists} - {title}.{output-ext}"
         output_tpl = os.path.join(dest_dir, name_tpl)
+        # An album/playlist URL would make spotDL download multiple tracks for one job.
+        target = f"{track.artist} - {track.title}"
+        try:
+            source = urlsplit(track.source_url or "")
+            if (
+                source.scheme == "https"
+                and source.hostname == "open.spotify.com"
+                and re.fullmatch(r"/(?:intl-[a-z]+/)?track/[A-Za-z0-9]+/?", source.path)
+            ):
+                target = track.source_url
+        except ValueError:
+            pass
         cmd = [
             self.settings.tool_bin("spotdl"),
             "download",
-            track.query,
+            target,
             "--output",
             output_tpl,
             "--format",

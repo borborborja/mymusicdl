@@ -33,6 +33,14 @@ curl -s localhost:8080/api/health | python -m json.tool
 
 ## Per-area checklists
 
+### Discovery, complete catalog and shared family preferences
+
+Run `pytest -q tests/test_collection.py` and `cd frontend && npm run build`.
+With the app running, run `CHECK_BASE_URL=http://127.0.0.1:8080 node tests/browser/discovery.mjs`;
+the same Playwright environment overrides described below apply. This browser test mocks APIs.
+See [DISCOVERY](DISCOVERY.md) for test coverage, the real Navidrome integration checks and the
+remaining production/source-download verification boundary.
+
 ### Download path (`downloads/`, `providers/`, `runner.py`, `worker.py`)
 The real test is an end-to-end download:
 1. Backend running with the tools venv populated (`spotdl`, `yt-dlp` installed).
@@ -77,3 +85,20 @@ The real test is an end-to-end download:
 - [ ] No golden rule (see [CLAUDE.md](../CLAUDE.md)) was broken.
 - [ ] No secret/infra value leaked into a tracked file.
 - [ ] Lint/format and the relevant build are green.
+
+### Saved-file playback and Navidrome delivery
+
+Run `pytest -q tests/test_library_playback_sync.py` with ffmpeg installed, then `cd frontend && npm run build`.
+The tests cover real audio tagging, secure range streaming, existing DB upgrades and durable scan recovery.
+For UI verification, open a finished download, use **Escuchar archivo descargado**, seek within the audio,
+and verify that Navidrome delivery has its own state and retry action. See [delivery details](PLAYBACK_AND_NAVIDROME.md).
+
+### Browser reconnect regression
+
+With Vite running, `node tests/browser/sse_reconnect.mjs` checks that a Navidrome confirmation
+missed during an SSE disconnection appears after reconnecting, without reloading the page.
+It mocks API responses and EventSource; it does not contact a music service.
+
+The script uses Playwright installed separately from the application. Set `PLAYWRIGHT_MODULE` to
+its absolute `index.mjs` path if it is not on Node's module path, `CHROMIUM_PATH` to an existing
+Chromium executable if needed, and `CHECK_BASE_URL` to the Vite URL (default `http://127.0.0.1:5173`).

@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     navidrome_url: str | None = None
     navidrome_user: str | None = None
     navidrome_password: str | None = None
+    navidrome_scan_timeout_s: float = 180
+    navidrome_sync_retry_s: float = 30
+    navidrome_sync_max_attempts: int = 5
+
+    # The catalog remains available when the discovery homepage is disabled.
+    discovery_enabled: bool = True
+    discovery_external_enabled: bool = True
 
     # ── Spotify metadata (client-credentials) ──
     spotify_client_id: str | None = None

@@ -21,6 +21,7 @@ log = get_logger(__name__)
 class DownloadQueue:
     def __init__(self) -> None:
         self._q: asyncio.Queue[str] = asyncio.Queue()
+        self.enqueue_lock = asyncio.Lock()
 
     async def put(self, job_id: str) -> None:
         await self._q.put(job_id)
@@ -37,6 +38,11 @@ class DownloadQueue:
 
     async def rehydrate(self, session: AsyncSession) -> int:
         """Reset interrupted download jobs to queued and re-enqueue them in creation order."""
+        await session.execute(
+            update(Job)
+            .where(Job.kind == "tool_update", Job.status.in_(("queued", "running")))
+            .values(status="error", stage="error", error="Update interrupted; retry from Tools")
+        )
         await session.execute(
             update(Job)
             .where(Job.kind == "download", Job.status == "running")
